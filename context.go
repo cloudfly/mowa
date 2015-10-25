@@ -50,25 +50,22 @@ func (c *Context) Assert(name, value string, rules []string) {
 	}
 }
 
-func (c *Context) String(name, defaultS string) string {
-	if v := c.Params.ByName(name); v == "" {
-		return defaultS
-	} else {
+func (c *Context) String(name, str string) string {
+	if v := c.Params.ByName(name); v != "" {
 		return v
 	}
+	return str
 }
 
-func (c *Context) Int(name string, defaultI int) int {
-
-	if v := c.Params.ByName(name); v == "" {
-		return defaultI
-	} else {
-		if i, err := strconv.Atoi(v); err != nil {
-			return defaultI
-		} else {
+func (c *Context) Int(name string, i int) int {
+	if v := c.Params.ByName(name); v != "" {
+		if j, err := strconv.Atoi(v); err != nil {
 			return i
+		} else {
+			return j
 		}
 	}
+	return i
 }
 
 func (c *Context) Query(name, str string) string {
