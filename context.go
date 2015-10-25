@@ -1,4 +1,4 @@
-package myapi
+package mowa
 
 import (
 	"encoding/json"
