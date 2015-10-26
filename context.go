@@ -83,16 +83,13 @@ func (c *Context) QuerySlice(name string, slice []string) []string {
 	return slice
 }
 
-func (c *Context) Form(name, str string) string {
-	if ret := c.Request.PostForm.Get(name); len(ret) > 0 {
-		return ret
+func (c *Context) BodyData(name string) interface{} {
+	data := c.Ctx.Value("body").(map[string]interface{})
+	if data == nil {
+		return nil
 	}
-	return str
-}
-
-func (c *Context) FormSlice(name string, slice []string) []string {
-	if ret, ok := c.Request.PostForm[name]; ok {
-		return ret
+	if value, ok := data[name]; ok {
+		return value
 	}
-	return slice
+	return nil
 }
