@@ -15,22 +15,7 @@ func init() {
 	}
 }
 
-func TestTestValue(t *testing.T) {
-}
-
-func TestString(t *testing.T) {
-}
-
-func TestInt(t *testing.T) {
-}
-
 func TestQuery(t *testing.T) {
 	name := testC.Query("name", "")
 	assert.Equal(t, name, "chen", "name should be chen")
-}
-
-func TestQuerySlice(t *testing.T) {
-}
-
-func TestForm(t *testing.T) {
 }

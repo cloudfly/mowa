@@ -2,6 +2,7 @@ package mowa
 
 import (
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/context"
 	"net/http"
 	"path"
 	"strings"
@@ -13,21 +14,23 @@ func HttpRouterHandle(paramRules map[string][]string, handlers ...Handler) httpr
 	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
-				Request:    req,
-				Writer:     rw,
-				Return:     false,
-				Params:     ps,
-				ParamRules: paramRules,
+				Ctx:     context.TODO(),
+				Request: req,
+				Writer:  rw,
+				Return:  false,
 			}
 		)
+		c.Ctx = context.WithValue(c.Ctx, "params", ps)
+		c.Ctx = context.WithValue(c.Ctx, "param-rules", paramRules)
 		c.Request.ParseForm()
 		// run handler
 		for _, handler := range handlers {
 			c.code, c.data = handler(c)
 			if c.Return {
-				break
+				goto RETURN
 			}
 		}
+	RETURN:
 		c.JSON(c.code, c.data)
 	}
 	return f

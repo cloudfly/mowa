@@ -3,19 +3,18 @@ package mowa
 import (
 	"encoding/json"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/context"
 	"net/http"
 	"strconv"
 )
 
 type Context struct {
-	Request    *http.Request
-	Writer     http.ResponseWriter
-	code       int
-	data       interface{}
-	Return     bool
-	Params     httprouter.Params
-	ParamRules map[string][]string
-	// TODO post form
+	Ctx     context.Context
+	Request *http.Request
+	Writer  http.ResponseWriter
+	code    int
+	data    interface{}
+	Return  bool
 }
 
 func (c *Context) JSON(code int, data interface{}) {
@@ -51,14 +50,16 @@ func (c *Context) Assert(name, value string, rules []string) {
 }
 
 func (c *Context) String(name, str string) string {
-	if v := c.Params.ByName(name); v != "" {
+	params := c.Ctx.Value("params").(httprouter.Params)
+	if v := params.ByName(name); v != "" {
 		return v
 	}
 	return str
 }
 
 func (c *Context) Int(name string, i int) int {
-	if v := c.Params.ByName(name); v != "" {
+	params := c.Ctx.Value("params").(httprouter.Params)
+	if v := params.ByName(name); v != "" {
 		if j, err := strconv.Atoi(v); err != nil {
 			return i
 		} else {
