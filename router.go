@@ -1,15 +1,20 @@
 package mowa
 
 import (
+	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 	"net/http"
 	"path"
+	"reflect"
 )
 
-type Handler func(*Context) (int, interface{})
+// TODO handler need not to return nothing,
+// two ways to return code and data, one is to set into context, another is to return (int, interface{})
+//type Handler func(*Context) (int, interface{})
+type Handler interface{}
 
-func HttpRouterHandle(handlers ...Handler) httprouter.Handle {
+func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
@@ -20,21 +25,29 @@ func HttpRouterHandle(handlers ...Handler) httprouter.Handle {
 			}
 		)
 		c.Ctx = context.WithValue(c.Ctx, "params", ps)
+		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
-				c.JSON(500, r)
+				// TODO error struct
+				c.JSON(500, map[string]interface{}{
+					"code": 500,
+					"msg":  r.(error).Error(),
+				})
 			}
 		}()
 		c.Request.ParseForm()
 		// run handler
 		for _, handler := range handlers {
-			c.code, c.data = handler(c)
+			ret := handler.Call([]reflect.Value{reflect.ValueOf(c)})
+			if len(ret) == 2 {
+				c.Code, c.Data = int(ret[0].Int()), ret[1].Interface()
+			}
 			if c.Return {
 				goto RETURN
 			}
 		}
 	RETURN:
-		c.JSON(c.code, c.data)
+		c.JSON(c.Code, c.Data)
 	}
 	return f
 }
@@ -61,6 +74,16 @@ func NewRouter(hooks ...[]Handler) *Router {
 	return r
 }
 
+func (r *Router) PreHook(hooks ...Handler) *Router {
+	r.hooks[0] = hooks
+	return r
+}
+
+func (r *Router) PostHook(hooks ...Handler) *Router {
+	r.hooks[1] = hooks
+	return r
+}
+
 func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	gr := &Router{
 		basic:  r.basic,
@@ -84,7 +107,14 @@ func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (r *Router) Method(method, uri string, handler ...Handler) {
 	handler = append(append(r.hooks[0], handler...), r.hooks[1]...)
-	r.basic.Handle(method, uri, HttpRouterHandle(handler...))
+	values := make([]reflect.Value, len(handler), len(handler))
+	for i, item := range handler {
+		if reflect.TypeOf(item).Kind() != reflect.Func {
+			panic(fmt.Errorf("Handler must be a function"))
+		}
+		values[i] = reflect.ValueOf(item)
+	}
+	r.basic.Handle(method, uri, HttpRouterHandle(values...))
 }
 
 func (r *Router) Get(uri string, handler ...Handler) {

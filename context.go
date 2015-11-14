@@ -16,22 +16,37 @@ type Context struct {
 	Ctx     context.Context
 	Request *http.Request
 	Writer  http.ResponseWriter
-	code    int
-	data    interface{}
+	Code    int
+	Data    interface{}
 	Return  bool
 }
 
 func (c *Context) JSON(code int, data interface{}) {
-	c.code = code
-	c.data = data
+	var (
+		content []byte
+		err     error
+	)
+	if code >= 200 {
+		c.Code = code
+	}
+	if data != nil {
+		c.Data = data
+	}
 ENCODE:
-	content, err := json.Marshal(data)
+	switch c.Data.(type) {
+	case string, int, int8, int16, int32, int64, float32, float64, bool, byte:
+		content, err = json.Marshal(map[string]interface{}{"data": c.Data})
+	case error:
+		content, err = json.Marshal(map[string]interface{}{"code": c.Code, "error": c.Data.(error).Error()})
+	default:
+		content, err = json.Marshal(c.Data)
+	}
 	if err != nil {
-		c.code = 500
-		c.data = errors.New("unvali return data")
+		c.Code = 500
+		c.Data = errors.New("unvali return data")
 		goto ENCODE
 	}
-	c.Writer.WriteHeader(c.code)
+	c.Writer.WriteHeader(c.Code)
 	c.Writer.Write(content)
 }
 
