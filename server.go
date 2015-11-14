@@ -20,9 +20,7 @@ func New() *Myapi {
 }
 
 func Default() *Myapi {
-	pre := []Handler{
-		ParamChecker,
-	}
+	pre := []Handler{}
 	api := New()
 	api.Router = NewRouter(pre)
 	return api

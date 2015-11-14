@@ -5,12 +5,11 @@ import (
 	"golang.org/x/net/context"
 	"net/http"
 	"path"
-	"strings"
 )
 
 type Handler func(*Context) (int, interface{})
 
-func HttpRouterHandle(paramRules map[string][]string, handlers ...Handler) httprouter.Handle {
+func HttpRouterHandle(handlers ...Handler) httprouter.Handle {
 	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
@@ -21,7 +20,11 @@ func HttpRouterHandle(paramRules map[string][]string, handlers ...Handler) httpr
 			}
 		)
 		c.Ctx = context.WithValue(c.Ctx, "params", ps)
-		c.Ctx = context.WithValue(c.Ctx, "param-rules", paramRules)
+		defer func() {
+			if r := recover(); r != nil {
+				c.JSON(500, r)
+			}
+		}()
 		c.Request.ParseForm()
 		// run handler
 		for _, handler := range handlers {
@@ -79,25 +82,9 @@ func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	r.basic.ServeHTTP(rw, req)
 }
 
-// request for /people/:name:string/:age:int will changed to:
-// httprouter uri is: `/people/:name/:age`
-// `:string` and `:int` setting will be stored into paramRules
 func (r *Router) Method(method, uri string, handler ...Handler) {
-	paramRules := make(map[string][]string)
-	fields := strings.Split(uri, "/")
-	fieldsClean := make([]string, len(fields), len(fields))
-	for i, field := range fields {
-		if len(field) > 0 && field[0] == ':' {
-			words := strings.Split(field, ":")
-			fieldsClean[i] = ":" + words[1]
-			paramRules[words[1]] = words[2:]
-		} else {
-			fieldsClean[i] = field
-		}
-	}
-	realURI := path.Join(r.prefix, path.Join(fieldsClean...))
 	handler = append(append(r.hooks[0], handler...), r.hooks[1]...)
-	r.basic.Handle(method, realURI, HttpRouterHandle(paramRules, handler...))
+	r.basic.Handle(method, uri, HttpRouterHandle(handler...))
 }
 
 func (r *Router) Get(uri string, handler ...Handler) {

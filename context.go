@@ -2,9 +2,13 @@ package mowa
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
+	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strconv"
 )
 
@@ -24,30 +28,14 @@ ENCODE:
 	content, err := json.Marshal(data)
 	if err != nil {
 		c.code = 500
-		c.data = NewError(500, "unvalid return data")
+		c.data = errors.New("unvali return data")
 		goto ENCODE
 	}
 	c.Writer.WriteHeader(c.code)
 	c.Writer.Write(content)
 }
 
-func (c *Context) TestValue(name, value string, rules []string) error {
-	for _, rule := range rules {
-		switch rule {
-		case "int":
-			if _, err := strconv.Atoi(value); err != nil {
-				return NewError(403, "given param %s = %s, not a integer", name, value)
-			}
-		}
-	}
-	return nil
-}
-
-func (c *Context) Assert(name, value string, rules []string) {
-	if err := c.TestValue(name, value, rules); err != nil {
-		c.JSON(403, err)
-	}
-}
+// request data fetch function
 
 func (c *Context) String(name, str string) string {
 	params := c.Ctx.Value("params").(httprouter.Params)
@@ -83,13 +71,69 @@ func (c *Context) QuerySlice(name string, slice []string) []string {
 	return slice
 }
 
-func (c *Context) BodyData(name string) interface{} {
-	data := c.Ctx.Value("body").(map[string]interface{})
-	if data == nil {
+func (c *Context) ReadBody() []byte {
+	content, err := ioutil.ReadAll(c.Request.Body)
+	c.Request.Body.Close()
+	if err != nil {
 		return nil
 	}
-	if value, ok := data[name]; ok {
-		return value
+	return content
+}
+
+// assert function
+
+func (c *Context) AssertNil(v interface{}) {
+	if v != nil {
+		panic(fmt.Errorf("%v is not nil", v))
 	}
-	return nil
+}
+
+func (c *Context) AssertNotNil(v interface{}) {
+	if v == nil {
+		panic(fmt.Errorf("%v is nil", v))
+	}
+}
+
+func (c *Context) AssertEqual(v1, v2 interface{}) {
+	if !reflect.DeepEqual(v1, v2) {
+		panic(fmt.Errorf("%v and %v is not equal", v1, v2))
+	}
+}
+
+func (c *Context) AssertNotEqual(v1, v2 interface{}) {
+	if reflect.DeepEqual(v1, v2) {
+		panic(fmt.Errorf("%v and %v is equal", v1, v2))
+	}
+}
+
+func (c *Context) IsEmpty(v interface{}) bool {
+	rv := reflect.ValueOf(v)
+	switch reflect.TypeOf(v).Kind() {
+	case reflect.Bool:
+		return rv.Bool() == false
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return rv.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return rv.Float() == 0.0
+	case reflect.Slice, reflect.Array, reflect.Chan, reflect.Map, reflect.String:
+		return rv.Len() == 0
+	case reflect.Ptr, reflect.Interface:
+		return v == nil
+	default:
+		return false
+	}
+
+}
+
+func (c *Context) AssertEmpty(v interface{}) {
+	if !c.IsEmpty(v) {
+		panic(fmt.Errorf("%v is not a zero value", v))
+	}
+}
+func (c *Context) AssertNotEmpty(v interface{}) {
+	if c.IsEmpty(v) {
+		panic(fmt.Errorf("%v is a zero value", v))
+	}
 }
