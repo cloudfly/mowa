@@ -117,7 +117,7 @@ func (r *Router) Method(method, uri string, handler ...Handler) {
 		}
 		values[i] = reflect.ValueOf(item)
 	}
-	r.basic.Handle(method, uri, HttpRouterHandle(values...))
+	r.basic.Handle(method, path.Join(r.prefix, uri), HttpRouterHandle(values...))
 }
 
 func (r *Router) Get(uri string, handler ...Handler) {
