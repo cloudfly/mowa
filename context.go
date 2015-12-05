@@ -13,7 +13,7 @@ import (
 )
 
 type Context struct {
-	Ctx     context.Context
+	context.Context
 	Request *http.Request
 	Writer  http.ResponseWriter
 	Code    int
@@ -53,7 +53,7 @@ ENCODE:
 // request data fetch function
 
 func (c *Context) String(name, str string) string {
-	params := c.Ctx.Value("params").(httprouter.Params)
+	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
 		return v
 	}
@@ -61,7 +61,7 @@ func (c *Context) String(name, str string) string {
 }
 
 func (c *Context) Int(name string, i int) int {
-	params := c.Ctx.Value("params").(httprouter.Params)
+	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
 		if j, err := strconv.Atoi(v); err != nil {
 			return i

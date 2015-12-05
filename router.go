@@ -9,7 +9,6 @@ import (
 	"reflect"
 )
 
-// TODO handler need not to return nothing,
 // two ways to return code and data, one is to set into context, another is to return (int, interface{})
 //type Handler func(*Context) (int, interface{})
 type Handler interface{}
@@ -18,13 +17,15 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
-				Ctx:     context.TODO(),
+				Context: context.TODO(),
 				Request: req,
 				Writer:  rw,
+				Code:    500,
+				Data:    "",
 				Return:  false,
 			}
 		)
-		c.Ctx = context.WithValue(c.Ctx, "params", ps)
+		c.Context = context.WithValue(c.Context, "params", ps)
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
@@ -47,7 +48,9 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 			}
 		}
 	RETURN:
-		c.JSON(c.Code, c.Data)
+		if c.Data != nil {
+			c.JSON(c.Code, c.Data)
+		}
 	}
 	return f
 }
