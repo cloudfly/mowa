@@ -15,17 +15,17 @@ type Handler interface{}
 
 func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		var (
-			c *Context = &Context{
-				Context: context.TODO(),
-				Request: req,
-				Writer:  rw,
-				Code:    500,
-				Data:    "",
-				Return:  false,
-			}
-		)
+		var c *Context = &Context{
+			Context: context.TODO(),
+			Request: req,
+			Writer:  rw,
+			Code:    500,
+			Data:    "",
+			Return:  false,
+		}
+
 		c.Context = context.WithValue(c.Context, "params", ps)
+
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
@@ -36,7 +36,9 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 				})
 			}
 		}()
+
 		c.Request.ParseForm()
+
 		// run handler
 		for _, handler := range handlers {
 			ret := handler.Call([]reflect.Value{reflect.ValueOf(c)})
@@ -47,11 +49,13 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 				goto RETURN
 			}
 		}
+
 	RETURN:
 		if c.Data != nil {
 			c.JSON(c.Code, c.Data)
 		}
 	}
+
 	return f
 }
 
@@ -66,6 +70,7 @@ func NewRouter(hooks ...[]Handler) *Router {
 		basic:  httprouter.New(),
 		prefix: "/",
 	}
+
 	// set hooks
 	for i := 0; i < 2; i++ {
 		if i < len(hooks) && hooks[i] != nil {
@@ -74,6 +79,7 @@ func NewRouter(hooks ...[]Handler) *Router {
 			r.hooks[i] = make([]Handler, 0)
 		}
 	}
+
 	return r
 }
 
@@ -82,8 +88,18 @@ func (r *Router) PreHook(hooks ...Handler) *Router {
 	return r
 }
 
+func (r *Router) PreUse(hooks ...Handler) *Router {
+	r.hooks[0] = append(r.hooks[0], hooks...)
+	return r
+}
+
 func (r *Router) PostHook(hooks ...Handler) *Router {
 	r.hooks[1] = hooks
+	return r
+}
+
+func (r *Router) PostUse(hooks ...Handler) *Router {
+	r.hooks[1] = append(r.hooks[1], hooks...)
 	return r
 }
 
@@ -92,15 +108,17 @@ func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
+
 	// combine parent hooks and given hooks
 	for i := 0; i < 2; i++ {
-		if i < len(hooks) && hooks[i] != nil {
+		if i < len(hooks) && hooks[i] != nil { // having hook setting
 			gr.hooks[i] = append(r.hooks[i], hooks[i]...)
-		} else {
+		} else { // no hook setting, carry the parent's hook
 			gr.hooks[i] = make([]Handler, len(r.hooks[i]))
 			copy(gr.hooks[i], r.hooks[i])
 		}
 	}
+
 	return gr
 }
 
