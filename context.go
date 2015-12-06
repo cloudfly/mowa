@@ -12,15 +12,22 @@ import (
 	"strconv"
 )
 
+// the context for each http request
 type Context struct {
 	context.Context
+	// the raw http request
 	Request *http.Request
-	Writer  http.ResponseWriter
-	Code    int
-	Data    interface{}
-	Return  bool
+	// the http response writer
+	Writer http.ResponseWriter
+	// the http code to response
+	Code int
+	// the data to response, the data will be format to json and written into response body
+	Data interface{}
+	// Return represent whether return directly, the hooks can set this value true, to interrupt the request, and response the current Code and Data directoly.
+	Return bool
 }
 
+// json formatter
 func (c *Context) JSON(code int, data interface{}) {
 	var (
 		content []byte
@@ -50,8 +57,7 @@ ENCODE:
 	c.Writer.Write(content)
 }
 
-// request data fetch function
-
+// get a string argument from request by `name`, if not found, return `str`
 func (c *Context) String(name, str string) string {
 	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
@@ -60,6 +66,7 @@ func (c *Context) String(name, str string) string {
 	return str
 }
 
+// get a integer argument from request by `name`, if not found, return `i`
 func (c *Context) Int(name string, i int) int {
 	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
@@ -72,6 +79,7 @@ func (c *Context) Int(name string, i int) int {
 	return i
 }
 
+// get a string argument from url-query by `name`, if not found, return `str`
 func (c *Context) Query(name, str string) string {
 	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
 		return ret
@@ -79,6 +87,7 @@ func (c *Context) Query(name, str string) string {
 	return str
 }
 
+// get a slice argument from url-query by `name`, if not found, return `slice`
 func (c *Context) QuerySlice(name string, slice []string) []string {
 	if ret, ok := c.Request.URL.Query()[name]; ok {
 		return ret
@@ -86,6 +95,7 @@ func (c *Context) QuerySlice(name string, slice []string) []string {
 	return slice
 }
 
+// get the request body
 func (c *Context) ReadBody() []byte {
 	content, err := ioutil.ReadAll(c.Request.Body)
 	c.Request.Body.Close()
@@ -97,30 +107,40 @@ func (c *Context) ReadBody() []byte {
 
 // assert function
 
+// assert if v is a nil value, panic if not
 func (c *Context) AssertNil(v interface{}) {
 	if v != nil {
 		panic(fmt.Errorf("%v is not nil", v))
 	}
 }
 
+// assert if v is not a nil value, panic if it is
 func (c *Context) AssertNotNil(v interface{}) {
 	if v == nil {
 		panic(fmt.Errorf("%v is nil", v))
 	}
 }
 
+// assert if v1 == v2, panic if not. here using reflect.DeepEqual() to check equation
 func (c *Context) AssertEqual(v1, v2 interface{}) {
 	if !reflect.DeepEqual(v1, v2) {
 		panic(fmt.Errorf("%v and %v is not equal", v1, v2))
 	}
 }
 
+// assert if v1 != v2, panic if equal. here using reflect.DeepEqual() to check equal
 func (c *Context) AssertNotEqual(v1, v2 interface{}) {
 	if reflect.DeepEqual(v1, v2) {
 		panic(fmt.Errorf("%v and %v is equal", v1, v2))
 	}
 }
 
+// assert if v is empty, return true if it is
+// empty means:
+// 1. zero for number, int or float
+// 2. zero length for string,chan,map and array.
+// 3. false for bool
+// 4. nil for interface
 func (c *Context) IsEmpty(v interface{}) bool {
 	rv := reflect.ValueOf(v)
 	switch reflect.TypeOf(v).Kind() {
@@ -142,11 +162,14 @@ func (c *Context) IsEmpty(v interface{}) bool {
 
 }
 
+// assert if v is empty, panic if not
 func (c *Context) AssertEmpty(v interface{}) {
 	if !c.IsEmpty(v) {
 		panic(fmt.Errorf("%v is not a zero value", v))
 	}
 }
+
+// assert if v is not empty, panic if it is
 func (c *Context) AssertNotEmpty(v interface{}) {
 	if c.IsEmpty(v) {
 		panic(fmt.Errorf("%v is a zero value", v))

@@ -1,6 +1,7 @@
 package mowa
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
@@ -70,6 +71,7 @@ func NewRouter(hooks ...[]Handler) *Router {
 		basic:  httprouter.New(),
 		prefix: "/",
 	}
+	r.basic.NotFound = new(notFoundHandler)
 
 	// set hooks
 	for i := 0; i < 2; i++ {
@@ -164,4 +166,15 @@ func (r *Router) Head(uri string, handler ...Handler) {
 
 func (r *Router) Options(uri string, handler ...Handler) {
 	r.Method("OPTIONS", uri, handler...)
+}
+
+type notFoundHandler struct{}
+
+func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	content, _ := json.Marshal(map[string]string{
+		"code":  "404",
+		"error": "page not found",
+	})
+	w.WriteHeader(404)
+	w.Write(content)
 }

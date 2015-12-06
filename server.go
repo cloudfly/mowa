@@ -4,14 +4,18 @@ import (
 	"net/http"
 )
 
-type Myapi struct {
+// represent a http server
+type Mowa struct {
+	// the router of server
 	*Router
+	// the address to listen on
 	Addr   string
 	server *http.Server
 }
 
-func New() *Myapi {
-	s := &Myapi{
+// Create a new http server
+func New() *Mowa {
+	s := &Mowa{
 		Router: NewRouter(),
 		server: new(http.Server),
 	}
@@ -19,14 +23,8 @@ func New() *Myapi {
 	return s
 }
 
-func Default() *Myapi {
-	pre := []Handler{}
-	api := New()
-	api.Router = NewRouter(pre)
-	return api
-}
-
-func (api *Myapi) Run(addr string) error {
+// Run the server, and listen to given addr
+func (api *Mowa) Run(addr string) error {
 	api.server.Addr = addr
 	return api.server.ListenAndServe()
 }
