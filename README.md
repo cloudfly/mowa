@@ -3,20 +3,13 @@ Mowa
 
 My Own Web Api Framework
 
-This is a golang web api framework for personal using.
-
-##TODO
-
-1. parse application/json body
-2. context use google context
-3. log use logrus
-4. complete context's TestValue function
+This is a very simple golang web api framework for personal usage.
 
 ##Demo
 
 ```golang
 
-api := mowa.Default()
+api := mowa.New()
 
 api.Get("/debug", func(c *mowa.Context) (int, interface{}) {
     return 200, "debug"
