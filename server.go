@@ -4,20 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/context"
 	"net/http"
 	"path"
-	"strings"
+	"reflect"
 )
 
 /************ API Server **************/
-type Myapi struct {
+// represent a http server
+type Mowa struct {
+	// the router of server
 	*Router
+	// the address to listen on
 	Addr   string
 	server *http.Server
 }
 
-func New() *Myapi {
-	s := &Myapi{
+// Create a new http server
+func New() *Mowa {
+	s := &Mowa{
 		Router: NewRouter(),
 		server: new(http.Server),
 	}
@@ -25,36 +30,65 @@ func New() *Myapi {
 	return s
 }
 
-func (api *Myapi) Run(addr string) error {
+// Run the server, and listen to given addr
+func (api *Mowa) Run(addr string) error {
 	api.server.Addr = addr
 	return api.server.ListenAndServe()
 }
 
 /****************** Router *********************/
-type Handler func(*Context) (int, interface{})
+type Handler interface{}
 
-func HttpRouterHandle(paramRules map[string][]string, handlers ...Handler) httprouter.Handle {
-	var f httprouter.Handle = func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
+	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
-				Request:    req,
-				Writer:     rw,
-				Return:     false,
-				Params:     ps,
-				ParamRules: paramRules,
+				Context: context.TODO(),
+				Request: req,
+				Writer:  rw,
+				Code:    500,
+				Data:    "",
 			}
+			b bool
 		)
+		c.Context = context.WithValue(c.Context, "params", ps)
+
+		// defer to recover in case of some panic, assert in context use this
+		defer func() {
+			if r := recover(); r != nil {
+				c.Writer.WriteHeader(500)
+				b, _ := json.Marshal(NewError(500, "handler panic", r.(error).Error()))
+				c.Writer.Write(b)
+			}
+		}()
+
 		c.Request.ParseForm()
+
 		// run handler
 		for _, handler := range handlers {
-			c.code, c.data = handler(c)
-			if c.Return {
-				break
+			ret := handler.Call([]reflect.Value{reflect.ValueOf(c)})
+			switch len(ret) {
+			case 1:
+				c.Code, c.Data = 200, ret[0].Interface()
+			case 2:
+				c.Code, c.Data = int(ret[0].Int()), ret[1].Interface()
+			case 3:
+				c.Code, c.Data, b = int(ret[0].Int()), ret[1].Interface(), ret[2].Bool()
+				if b {
+					break
+				}
 			}
 		}
-		c.JSON(c.code, c.data)
+
+		if c.Data != nil {
+			content, err := json.Marshal(c.Data)
+			if err != nil {
+				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
+			}
+			c.Writer.WriteHeader(c.Code)
+			c.Writer.Write(content)
+		}
 	}
-	return f
 }
 
 type Router struct {
@@ -68,6 +102,8 @@ func NewRouter(hooks ...[]Handler) *Router {
 		basic:  httprouter.New(),
 		prefix: "/",
 	}
+	r.basic.NotFound = new(notFoundHandler)
+
 	// set hooks
 	for i := 0; i < 2; i++ {
 		if i < len(hooks) && hooks[i] != nil {
@@ -79,6 +115,26 @@ func NewRouter(hooks ...[]Handler) *Router {
 	return r
 }
 
+func (r *Router) PreHook(hooks ...Handler) *Router {
+	r.hooks[0] = hooks
+	return r
+}
+
+func (r *Router) PreUse(hooks ...Handler) *Router {
+	r.hooks[0] = append(r.hooks[0], hooks...)
+	return r
+}
+
+func (r *Router) PostHook(hooks ...Handler) *Router {
+	r.hooks[1] = hooks
+	return r
+}
+
+func (r *Router) PostUse(hooks ...Handler) *Router {
+	r.hooks[1] = append(r.hooks[1], hooks...)
+	return r
+}
+
 func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	gr := &Router{
 		basic:  r.basic,
@@ -86,9 +142,9 @@ func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	}
 	// combine parent hooks and given hooks
 	for i := 0; i < 2; i++ {
-		if i < len(hooks) && hooks[i] != nil {
+		if i < len(hooks) && hooks[i] != nil { // having hook setting
 			gr.hooks[i] = append(r.hooks[i], hooks[i]...)
-		} else {
+		} else { // no hook setting, carry the parent's hook
 			gr.hooks[i] = make([]Handler, len(r.hooks[i]))
 			copy(gr.hooks[i], r.hooks[i])
 		}
@@ -104,74 +160,47 @@ func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 // httprouter uri is: `/people/:name/:age`
 // `:string` and `:int` setting will be stored into paramRules
 func (r *Router) Method(method, uri string, handler ...Handler) {
-	paramRules := make(map[string][]string)
-	fields := strings.Split(uri, "/")
-	fieldsClean := make([]string, len(fields), len(fields))
-	for i, field := range fields {
-		if len(field) > 0 && field[0] == ':' {
-			words := strings.Split(field, ":")
-			fieldsClean[i] = ":" + words[1]
-			paramRules[words[1]] = words[2:]
-		} else {
-			fieldsClean[i] = field
-		}
-	}
-	realURI := path.Join(r.prefix, path.Join(fieldsClean...))
 	handler = append(append(r.hooks[0], handler...), r.hooks[1]...)
-	r.basic.Handle(method, realURI, HttpRouterHandle(paramRules, handler...))
+	values := make([]reflect.Value, len(handler), len(handler))
+	for i, item := range handler {
+		if reflect.TypeOf(item).Kind() != reflect.Func {
+			panic(fmt.Errorf("Handler must be a function"))
+		}
+		values[i] = reflect.ValueOf(item)
+	}
+	r.basic.Handle(method, path.Join(r.prefix, uri), HttpRouterHandle(values...))
 }
 
-func (r *Router) Get(uri string, handler ...Handler) {
-	r.Method("GET", uri, handler...)
-}
+func (r *Router) Get(uri string, handler ...Handler)     { r.Method("GET", uri, handler...) }
+func (r *Router) Post(uri string, handler ...Handler)    { r.Method("POST", uri, handler...) }
+func (r *Router) Put(uri string, handler ...Handler)     { r.Method("PUT", uri, handler...) }
+func (r *Router) Patch(uri string, handler ...Handler)   { r.Method("PATCH", uri, handler...) }
+func (r *Router) Delete(uri string, handler ...Handler)  { r.Method("DELETE", uri, handler...) }
+func (r *Router) Head(uri string, handler ...Handler)    { r.Method("HEAD", uri, handler...) }
+func (r *Router) Options(uri string, handler ...Handler) { r.Method("OPTIONS", uri, handler...) }
 
-func (r *Router) Post(uri string, handler ...Handler) {
-	r.Method("POST", uri, handler...)
-}
+type notFoundHandler struct{}
 
-func (r *Router) Put(uri string, handler ...Handler) {
-	r.Method("PUT", uri, handler...)
-}
-
-func (r *Router) Patch(uri string, handler ...Handler) {
-	r.Method("PATCH", uri, handler...)
-}
-
-func (r *Router) Delete(uri string, handler ...Handler) {
-	r.Method("DELETE", uri, handler...)
-}
-
-func (r *Router) Head(uri string, handler ...Handler) {
-	r.Method("HEAD", uri, handler...)
-}
-
-func (r *Router) Options(uri string, handler ...Handler) {
-	r.Method("OPTIONS", uri, handler...)
+func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	content, _ := json.Marshal(map[string]string{
+		"code": "404",
+		"msg":  "page not found",
+	})
+	w.WriteHeader(404)
+	w.Write(content)
 }
 
 /*********** Context *****************/
 type Context struct {
-	Request    *http.Request
-	Writer     http.ResponseWriter
-	code       int
-	data       interface{}
-	Return     bool
-	Params     httprouter.Params
-	ParamRules map[string][]string
-}
-
-func (c *Context) JSON(code int, data interface{}) {
-	c.code = code
-	c.data = data
-ENCODE:
-	content, err := json.Marshal(data)
-	if err != nil {
-		c.code = 500
-		c.data = NewError(500, "unvalid return data")
-		goto ENCODE
-	}
-	c.Writer.WriteHeader(c.code)
-	c.Writer.Write(content)
+	context.Context
+	// the raw http request
+	Request *http.Request
+	// the http response writer
+	Writer http.ResponseWriter
+	// the http code to response
+	Code int
+	// the data to response, the data will be format to json and written into response body
+	Data interface{}
 }
 
 /************* Error **************/
