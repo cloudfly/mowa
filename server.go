@@ -56,8 +56,8 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
-				c.Writer.WriteHeader(500)
 				b, _ := json.Marshal(NewError(500, "handler panic", r.(error).Error()))
+				c.Writer.WriteHeader(500)
 				c.Writer.Write(b)
 			}
 		}()
@@ -75,11 +75,11 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 			case 3:
 				c.Code, c.Data, b = int(ret[0].Int()), ret[1].Interface(), ret[2].Bool()
 				if b {
-					break
+					goto RETURN
 				}
 			}
 		}
-
+	RETURN:
 		if c.Data != nil {
 			content, err := json.Marshal(c.Data)
 			if err != nil {
@@ -182,15 +182,13 @@ func (r *Router) Options(uri string, handler ...Handler) { r.Method("OPTIONS", u
 type notFoundHandler struct{}
 
 func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	content, _ := json.Marshal(map[string]string{
-		"code": "404",
-		"msg":  "page not found",
-	})
+	content, _ := json.Marshal(map[string]string{"code": "404", "msg": "page not found"})
 	w.WriteHeader(404)
 	w.Write(content)
 }
 
 /*********** Context *****************/
+
 type Context struct {
 	context.Context
 	// the raw http request
@@ -204,6 +202,7 @@ type Context struct {
 }
 
 /************* Error **************/
+
 type Error struct {
 	Code  int    `json:"code"`
 	Msg   string `json:"msg"`
@@ -211,10 +210,7 @@ type Error struct {
 }
 
 func NewError(code int, format string, v ...interface{}) error {
-	return &Error{
-		Code: code,
-		Msg:  fmt.Sprintf(format, v...),
-	}
+	return &Error{Code: code, Msg: fmt.Sprintf(format, v...)}
 }
 
 func (err *Error) Error() string {
