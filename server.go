@@ -94,7 +94,6 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 		c.Request.ParseForm()
 
 		// run handler
-		fmt.Println(len(handlers), "handlers")
 		for _, handler := range handlers {
 			switch handler.t {
 			case HANDLER0:
