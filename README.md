@@ -8,35 +8,35 @@ This is a very simple golang web api framework for personal usage.
 ##Demo
 
 ```golang
+package main
 
-<<<<<<< HEAD
-api := mowa.New()
-=======
+import (
+	"fmt"
+	"github.com/cloudfly/mowa"
+)
+
 func preLog(c *mowa.Context) {
-	logrus.Infof("%s %s", c.Request.Method, c.Request.URL)
+	fmt.Printf("%s %s\n", c.Request.Method, c.Request.URL)
 }
->>>>>>> 21f39f5fcaf6bbe787b1e76592689ca012d4147e
 
 func postLog(c *mowa.Context) {
-	logrus.Infof("Response %d, %s", c.Code, c.Data)
+	fmt.Printf("Response %d, %s\n", c.Code, c.Data)
 }
 
+func main() {
+	api := mowa.New()
+	api.PreHook(preLog)
+	api.PostHook(postLog)
 
+	api.Get("/debug", func(c *mowa.Context) (int, interface{}, bool) {
+		return 200, "debug", true
+	})
 
-func main(){
-        api := mowa.New()
-	server.PreHook(preLog)
-	server.PostHook(postLog)
+	v1 := api.Group("/api/v1")
+	v1.Get("/hello", func(c *mowa.Context) (int, interface{}) {
+		return 200, "hello world!"
+	})
 
-        api.Get("/debug", func(c *mowa.Context) (int, interface{}) {
-            return 200, "debug"
-        })
-
-        v1 := api.Group("/api/v1")
-        v1.Get("/hello", func(c *mowa.Context) (int, interface{}) {
-            return 200, "hello world!"
-        })
-
-        api.Run(":10000")
+	api.Run(":10000")
 }
 ```

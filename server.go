@@ -2,12 +2,12 @@ package mowa
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 	"net/http"
 	"path"
-	"reflect"
 )
 
 /************ API Server **************/
@@ -33,13 +33,42 @@ func New() *Mowa {
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
 	api.server.Addr = addr
+	println("Starting serve on", addr)
 	return api.server.ListenAndServe()
 }
 
 /****************** Router *********************/
-type Handler interface{}
+const (
+	HANDLER0 = iota
+	HANDLER1
+	HANDLER2
+	HANDLER3
+)
 
-func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
+type Handler struct {
+	t  int
+	h0 func(c *Context)
+	h1 func(c *Context) interface{}
+	h2 func(c *Context) (int, interface{})
+	h3 func(c *Context) (int, interface{}, bool)
+}
+
+// Create a new handler, the given argument must be a function
+func NewHandler(f interface{}) (Handler, error) {
+	switch f.(type) {
+	case func(c *Context):
+		return Handler{t: HANDLER0, h0: f.(func(c *Context))}, nil
+	case func(c *Context) interface{}:
+		return Handler{t: HANDLER1, h1: f.(func(c *Context) interface{})}, nil
+	case func(c *Context) (int, interface{}):
+		return Handler{t: HANDLER2, h2: f.(func(c *Context) (int, interface{}))}, nil
+	case func(c *Context) (int, interface{}, bool):
+		return Handler{t: HANDLER3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
+	}
+	return Handler{}, errors.New("invalid function type for handler")
+}
+
+func httpRouterHandle(handlers []Handler) httprouter.Handle {
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c *Context = &Context{
@@ -56,7 +85,7 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
-				b, _ := json.Marshal(NewError(500, "handler panic", r.(error).Error()))
+				b, _ := json.Marshal(NewError(500, "handler panic: %s", r.(error).Error()))
 				c.Writer.WriteHeader(500)
 				c.Writer.Write(b)
 			}
@@ -65,15 +94,17 @@ func HttpRouterHandle(handlers ...reflect.Value) httprouter.Handle {
 		c.Request.ParseForm()
 
 		// run handler
+		fmt.Println(len(handlers), "handlers")
 		for _, handler := range handlers {
-			ret := handler.Call([]reflect.Value{reflect.ValueOf(c)})
-			switch len(ret) {
-			case 1:
-				c.Code, c.Data = 200, ret[0].Interface()
-			case 2:
-				c.Code, c.Data = int(ret[0].Int()), ret[1].Interface()
-			case 3:
-				c.Code, c.Data, b = int(ret[0].Int()), ret[1].Interface(), ret[2].Bool()
+			switch handler.t {
+			case HANDLER0:
+				handler.h0(c)
+			case HANDLER1:
+				c.Code, c.Data = 200, handler.h1(c)
+			case HANDLER2:
+				c.Code, c.Data = handler.h2(c)
+			case HANDLER3:
+				c.Code, c.Data, b = handler.h3(c)
 				if b {
 					goto RETURN
 				}
@@ -115,25 +146,23 @@ func NewRouter(hooks ...[]Handler) *Router {
 	return r
 }
 
-func (r *Router) PreHook(hooks ...Handler) *Router {
-	r.hooks[0] = hooks
-	return r
+func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	r.basic.ServeHTTP(rw, req)
 }
 
-func (r *Router) PreUse(hooks ...Handler) *Router {
-	r.hooks[0] = append(r.hooks[0], hooks...)
+func (r *Router) setHook(i int, hooks ...interface{}) *Router {
+	r.hooks[i] = make([]Handler, 0, len(hooks))
+	for _, hook := range hooks {
+		h, err := NewHandler(hook)
+		if err != nil {
+			panic(err)
+		}
+		r.hooks[i] = append(r.hooks[i], h)
+	}
 	return r
 }
-
-func (r *Router) PostHook(hooks ...Handler) *Router {
-	r.hooks[1] = hooks
-	return r
-}
-
-func (r *Router) PostUse(hooks ...Handler) *Router {
-	r.hooks[1] = append(r.hooks[1], hooks...)
-	return r
-}
+func (r *Router) PreHook(hooks ...interface{}) *Router  { return r.setHook(0, hooks...) }
+func (r *Router) PostHook(hooks ...interface{}) *Router { return r.setHook(1, hooks...) }
 
 func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	gr := &Router{
@@ -152,32 +181,30 @@ func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	return gr
 }
 
-func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	r.basic.ServeHTTP(rw, req)
-}
-
 // request for /people/:name:string/:age:int will changed to:
 // httprouter uri is: `/people/:name/:age`
 // `:string` and `:int` setting will be stored into paramRules
-func (r *Router) Method(method, uri string, handler ...Handler) {
-	handler = append(append(r.hooks[0], handler...), r.hooks[1]...)
-	values := make([]reflect.Value, len(handler), len(handler))
-	for i, item := range handler {
-		if reflect.TypeOf(item).Kind() != reflect.Func {
-			panic(fmt.Errorf("Handler must be a function"))
+func (r *Router) Method(method, uri string, handler ...interface{}) {
+	var handlers []Handler = make([]Handler, 0, len(r.hooks[0])+len(handler)+len(r.hooks[1]))
+	handlers = append(handlers, r.hooks[0]...)
+	for _, h := range handler {
+		tmp, err := NewHandler(h)
+		if err != nil {
+			panic(err)
 		}
-		values[i] = reflect.ValueOf(item)
+		handlers = append(handlers, tmp)
 	}
-	r.basic.Handle(method, path.Join(r.prefix, uri), HttpRouterHandle(values...))
+	handlers = append(handlers, r.hooks[1]...)
+	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(handlers))
 }
 
-func (r *Router) Get(uri string, handler ...Handler)     { r.Method("GET", uri, handler...) }
-func (r *Router) Post(uri string, handler ...Handler)    { r.Method("POST", uri, handler...) }
-func (r *Router) Put(uri string, handler ...Handler)     { r.Method("PUT", uri, handler...) }
-func (r *Router) Patch(uri string, handler ...Handler)   { r.Method("PATCH", uri, handler...) }
-func (r *Router) Delete(uri string, handler ...Handler)  { r.Method("DELETE", uri, handler...) }
-func (r *Router) Head(uri string, handler ...Handler)    { r.Method("HEAD", uri, handler...) }
-func (r *Router) Options(uri string, handler ...Handler) { r.Method("OPTIONS", uri, handler...) }
+func (r *Router) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
+func (r *Router) Post(uri string, handler ...interface{})    { r.Method("POST", uri, handler...) }
+func (r *Router) Put(uri string, handler ...interface{})     { r.Method("PUT", uri, handler...) }
+func (r *Router) Patch(uri string, handler ...interface{})   { r.Method("PATCH", uri, handler...) }
+func (r *Router) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
+func (r *Router) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
+func (r *Router) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
 
 type notFoundHandler struct{}
 
@@ -188,7 +215,6 @@ func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 /*********** Context *****************/
-
 type Context struct {
 	context.Context
 	// the raw http request
@@ -202,11 +228,9 @@ type Context struct {
 }
 
 /************* Error **************/
-
 type Error struct {
-	Code  int    `json:"code"`
-	Msg   string `json:"msg"`
-	Cause string `json:"cause"`
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
 }
 
 func NewError(code int, format string, v ...interface{}) error {
