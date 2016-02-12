@@ -14,7 +14,7 @@ import (
 // represent a http server
 type Mowa struct {
 	// the router of server
-	*Router
+	Router
 	// the address to listen on
 	Addr   string
 	server *http.Server
@@ -23,7 +23,7 @@ type Mowa struct {
 // Create a new http server
 func New() *Mowa {
 	s := &Mowa{
-		Router: NewRouter(),
+		Router: NewMowaRouter(),
 		server: new(http.Server),
 	}
 	s.server.Handler = s
@@ -37,14 +37,15 @@ func (api *Mowa) Run(addr string) error {
 	return api.server.ListenAndServe()
 }
 
-/****************** Router *********************/
+/****************** Handler *********************/
 const (
-	HANDLER0 = iota
-	HANDLER1
-	HANDLER2
-	HANDLER3
+	handlerType0 = iota
+	handlerType1
+	handlerType2
+	handlerType3
 )
 
+// The server handler type
 type Handler struct {
 	t  int
 	h0 func(c *Context)
@@ -57,13 +58,13 @@ type Handler struct {
 func NewHandler(f interface{}) (Handler, error) {
 	switch f.(type) {
 	case func(c *Context):
-		return Handler{t: HANDLER0, h0: f.(func(c *Context))}, nil
+		return Handler{t: handlerType0, h0: f.(func(c *Context))}, nil
 	case func(c *Context) interface{}:
-		return Handler{t: HANDLER1, h1: f.(func(c *Context) interface{})}, nil
+		return Handler{t: handlerType1, h1: f.(func(c *Context) interface{})}, nil
 	case func(c *Context) (int, interface{}):
-		return Handler{t: HANDLER2, h2: f.(func(c *Context) (int, interface{}))}, nil
+		return Handler{t: handlerType2, h2: f.(func(c *Context) (int, interface{}))}, nil
 	case func(c *Context) (int, interface{}, bool):
-		return Handler{t: HANDLER3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
+		return Handler{t: handlerType3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
 	}
 	return Handler{}, errors.New("invalid function type for handler")
 }
@@ -96,13 +97,13 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 		// run handler
 		for _, handler := range handlers {
 			switch handler.t {
-			case HANDLER0:
+			case handlerType0:
 				handler.h0(c)
-			case HANDLER1:
+			case handlerType1:
 				c.Code, c.Data = 200, handler.h1(c)
-			case HANDLER2:
+			case handlerType2:
 				c.Code, c.Data = handler.h2(c)
-			case HANDLER3:
+			case handlerType3:
 				c.Code, c.Data, b = handler.h3(c)
 				if b {
 					goto RETURN
@@ -121,14 +122,23 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 	}
 }
 
-type Router struct {
+/****************** Router *********************/
+
+// The Router used by server
+type Router interface {
+	ServeHTTP(http.ResponseWriter, *http.Request)
+}
+
+// Default router type
+type MowaRouter struct {
 	basic  *httprouter.Router
 	prefix string
 	hooks  [2][]Handler // hooks[0] is pre run handler, hooks[1] is post run handler
 }
 
-func NewRouter(hooks ...[]Handler) *Router {
-	r := &Router{
+// create a default router
+func NewMowaRouter(hooks ...[]Handler) *MowaRouter {
+	r := &MowaRouter{
 		basic:  httprouter.New(),
 		prefix: "/",
 	}
@@ -145,11 +155,11 @@ func NewRouter(hooks ...[]Handler) *Router {
 	return r
 }
 
-func (r *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (r *MowaRouter) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	r.basic.ServeHTTP(rw, req)
 }
 
-func (r *Router) setHook(i int, hooks ...interface{}) *Router {
+func (r *MowaRouter) setHook(i int, hooks ...interface{}) *MowaRouter {
 	r.hooks[i] = make([]Handler, 0, len(hooks))
 	for _, hook := range hooks {
 		h, err := NewHandler(hook)
@@ -160,11 +170,16 @@ func (r *Router) setHook(i int, hooks ...interface{}) *Router {
 	}
 	return r
 }
-func (r *Router) PreHook(hooks ...interface{}) *Router  { return r.setHook(0, hooks...) }
-func (r *Router) PostHook(hooks ...interface{}) *Router { return r.setHook(1, hooks...) }
 
-func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
-	gr := &Router{
+// set the pre hook for router, prehook will run before handlers
+func (r *MowaRouter) PreHook(hooks ...interface{}) *MowaRouter { return r.setHook(0, hooks...) }
+
+// set the post hook for router, posthook will run after handlers
+func (r *MowaRouter) PostHook(hooks ...interface{}) *MowaRouter { return r.setHook(1, hooks...) }
+
+// create a router group with the uri prefix
+func (r *MowaRouter) Group(prefix string, hooks ...[]Handler) *MowaRouter {
+	gr := &MowaRouter{
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
@@ -180,10 +195,8 @@ func (r *Router) Group(prefix string, hooks ...[]Handler) *Router {
 	return gr
 }
 
-// request for /people/:name:string/:age:int will changed to:
-// httprouter uri is: `/people/:name/:age`
-// `:string` and `:int` setting will be stored into paramRules
-func (r *Router) Method(method, uri string, handler ...interface{}) {
+// raw function route for handler, the method can be 'GET', 'POST'...
+func (r *MowaRouter) Method(method, uri string, handler ...interface{}) {
 	var handlers []Handler = make([]Handler, 0, len(r.hooks[0])+len(handler)+len(r.hooks[1]))
 	handlers = append(handlers, r.hooks[0]...)
 	for _, h := range handler {
@@ -197,13 +210,13 @@ func (r *Router) Method(method, uri string, handler ...interface{}) {
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(handlers))
 }
 
-func (r *Router) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
-func (r *Router) Post(uri string, handler ...interface{})    { r.Method("POST", uri, handler...) }
-func (r *Router) Put(uri string, handler ...interface{})     { r.Method("PUT", uri, handler...) }
-func (r *Router) Patch(uri string, handler ...interface{})   { r.Method("PATCH", uri, handler...) }
-func (r *Router) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
-func (r *Router) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
-func (r *Router) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
+func (r *MowaRouter) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
+func (r *MowaRouter) Post(uri string, handler ...interface{})    { r.Method("POST", uri, handler...) }
+func (r *MowaRouter) Put(uri string, handler ...interface{})     { r.Method("PUT", uri, handler...) }
+func (r *MowaRouter) Patch(uri string, handler ...interface{})   { r.Method("PATCH", uri, handler...) }
+func (r *MowaRouter) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
+func (r *MowaRouter) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
+func (r *MowaRouter) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
 
 type notFoundHandler struct{}
 
@@ -214,6 +227,8 @@ func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 /*********** Context *****************/
+
+// The context in every request
 type Context struct {
 	context.Context
 	// the raw http request
@@ -227,9 +242,13 @@ type Context struct {
 }
 
 /************* Error **************/
+
+// The server error type
 type Error struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	// the error code, http code encouraged
+	Code int `json:"code"`
+	// the error message
+	Msg string `json:"msg"`
 }
 
 func NewError(code int, format string, v ...interface{}) error {
