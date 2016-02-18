@@ -127,6 +127,16 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 // The Router used by server
 type Router interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
+	PreHook(hooks ...interface{}) *MowaRouter
+	PostHook(hooks ...interface{}) *MowaRouter
+	Group(prefix string, hooks ...[]Handler) *MowaRouter
+	Get(uri string, handler ...interface{})
+	Post(uri string, handler ...interface{})
+	Put(uri string, handler ...interface{})
+	Patch(uri string, handler ...interface{})
+	Delete(uri string, handler ...interface{})
+	Head(uri string, handler ...interface{})
+	Options(uri string, handler ...interface{})
 }
 
 // Default router type
