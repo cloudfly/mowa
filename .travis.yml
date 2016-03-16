@@ -5,7 +5,6 @@ go:
 install:
   - go get github.com/julienschmidt/httprouter
   - go get golang.org/x/net/context
-  - go get github.com/stretchr/testify
 
 script:
   - go test -v

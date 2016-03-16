@@ -1,7 +1,6 @@
 package mowa
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -37,7 +36,7 @@ func handle3(c *Context) (int, interface{}) {
 }
 
 func TestServer(t *testing.T) {
-	api := Default()
+	api := New()
 	go api.Run(":10000")
 	api.Get("/test", func(c *Context) (int, interface{}) {
 		return 200, "test"
@@ -55,13 +54,12 @@ func TestServer(t *testing.T) {
 }
 
 func TestServeHTTP(t *testing.T) {
-	router := NewRouter([]Handler{ParamChecker})
+	router := NewMowaRouter()
 	router.Group("/api/v1").Get("/chen", handle1)
 	router.Get("/yun", handle2)
-	router.Get("/fei/:age:int", handle3)
+	router.Get("/fei/:age", handle3)
 
 	for _, uri := range []string{"/chen", "/api/v1/chen", "/yun", "/fei/aa", "/fei/25"} {
-
 		req, err := http.NewRequest("GET", "http://localhost"+uri, nil)
 		if err != nil {
 			t.Error(err)
