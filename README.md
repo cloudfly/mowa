@@ -1,5 +1,7 @@
 Mowa
 ====
+[![Build Status](https://travis-ci.org/cloudfly/mowa.svg?branch=master)](https://travis-ci.org/cloudfly/mowa)
+[![GoDoc](http://godoc.org/github.com/cloudfly/mowa?status.svg)](http://godoc.org/github.com/cloudfly/mowa)
 
 This is a very very simple mini web framework written by golang.
 
