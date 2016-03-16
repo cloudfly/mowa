@@ -1,9 +1,7 @@
 Mowa
 ====
 
-My Own Web Api Framework
-
-This is a very simple golang web api framework for personal usage.
+This is a very very simple mini web framework written by golang.
 
 ##Demo
 

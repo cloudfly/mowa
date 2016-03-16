@@ -37,13 +37,35 @@ func (api *Mowa) Run(addr string) error {
 	return api.server.ListenAndServe()
 }
 
+// The Router used by server
+type Router interface {
+	ServeHTTP(http.ResponseWriter, *http.Request)
+	PreHook(hooks ...interface{}) Router
+	PostHook(hooks ...interface{}) Router
+	Group(prefix string, hooks ...[]Handler) Router
+	Get(uri string, handler ...interface{})
+	Post(uri string, handler ...interface{})
+	Put(uri string, handler ...interface{})
+	Patch(uri string, handler ...interface{})
+	Delete(uri string, handler ...interface{})
+	Head(uri string, handler ...interface{})
+	Options(uri string, handler ...interface{})
+}
+
 /****************** Handler *********************/
-const (
-	handlerType0 = iota
-	handlerType1
-	handlerType2
-	handlerType3
-)
+
+// The context in every request
+type Context struct {
+	context.Context
+	// the raw http request
+	Request *http.Request
+	// the http response writer
+	Writer http.ResponseWriter
+	// the http code to response
+	Code int
+	// the data to response, the data will be format to json and written into response body
+	Data interface{}
+}
 
 // The server handler type
 type Handler struct {
@@ -53,6 +75,13 @@ type Handler struct {
 	h2 func(c *Context) (int, interface{})
 	h3 func(c *Context) (int, interface{}, bool)
 }
+
+const (
+	handlerType0 = iota
+	handlerType1
+	handlerType2
+	handlerType3
+)
 
 // Create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
@@ -124,22 +153,7 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 
 /****************** Router *********************/
 
-// The Router used by server
-type Router interface {
-	ServeHTTP(http.ResponseWriter, *http.Request)
-	PreHook(hooks ...interface{}) *MowaRouter
-	PostHook(hooks ...interface{}) *MowaRouter
-	Group(prefix string, hooks ...[]Handler) *MowaRouter
-	Get(uri string, handler ...interface{})
-	Post(uri string, handler ...interface{})
-	Put(uri string, handler ...interface{})
-	Patch(uri string, handler ...interface{})
-	Delete(uri string, handler ...interface{})
-	Head(uri string, handler ...interface{})
-	Options(uri string, handler ...interface{})
-}
-
-// Default router type
+// Default router type, a realization of Router interface
 type MowaRouter struct {
 	basic  *httprouter.Router
 	prefix string
@@ -169,7 +183,7 @@ func (r *MowaRouter) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	r.basic.ServeHTTP(rw, req)
 }
 
-func (r *MowaRouter) setHook(i int, hooks ...interface{}) *MowaRouter {
+func (r *MowaRouter) setHook(i int, hooks ...interface{}) Router {
 	r.hooks[i] = make([]Handler, 0, len(hooks))
 	for _, hook := range hooks {
 		h, err := NewHandler(hook)
@@ -182,13 +196,13 @@ func (r *MowaRouter) setHook(i int, hooks ...interface{}) *MowaRouter {
 }
 
 // set the pre hook for router, prehook will run before handlers
-func (r *MowaRouter) PreHook(hooks ...interface{}) *MowaRouter { return r.setHook(0, hooks...) }
+func (r *MowaRouter) PreHook(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
 
 // set the post hook for router, posthook will run after handlers
-func (r *MowaRouter) PostHook(hooks ...interface{}) *MowaRouter { return r.setHook(1, hooks...) }
+func (r *MowaRouter) PostHook(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
 
 // create a router group with the uri prefix
-func (r *MowaRouter) Group(prefix string, hooks ...[]Handler) *MowaRouter {
+func (r *MowaRouter) Group(prefix string, hooks ...[]Handler) Router {
 	gr := &MowaRouter{
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
@@ -234,21 +248,6 @@ func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	content, _ := json.Marshal(map[string]string{"code": "404", "msg": "page not found"})
 	w.WriteHeader(404)
 	w.Write(content)
-}
-
-/*********** Context *****************/
-
-// The context in every request
-type Context struct {
-	context.Context
-	// the raw http request
-	Request *http.Request
-	// the http response writer
-	Writer http.ResponseWriter
-	// the http code to response
-	Code int
-	// the data to response, the data will be format to json and written into response body
-	Data interface{}
 }
 
 /************* Error **************/
