@@ -58,6 +58,13 @@ func (c *Context) ReadBody() []byte {
 
 // assert function
 
+// AssertErr assert if err is a nil value, panic if not
+func (c *Context) AssertErr(err error) {
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
 // assert if v is a nil value, panic if not
 func (c *Context) AssertNil(v interface{}) {
 	if v != nil {
