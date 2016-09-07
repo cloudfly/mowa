@@ -115,7 +115,14 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
 			if r := recover(); r != nil {
-				b, _ := json.Marshal(NewError(500, "handler panic: %s", r.(error).Error()))
+				errs := ""
+				switch rr := r.(type) {
+				case string:
+					errs = rr
+				case error:
+					errs = rr.Error()
+				}
+				b, _ := json.Marshal(NewError(500, errs))
 				c.Writer.WriteHeader(500)
 				c.Writer.Write(b)
 			}
