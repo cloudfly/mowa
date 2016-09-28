@@ -54,7 +54,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestServeHTTP(t *testing.T) {
-	router := NewMowaRouter()
+	router := newRouter()
 	router.Group("/api/v1").Get("/chen", handle1)
 	router.Get("/yun", handle2)
 	router.Get("/fei/:age", handle3)
