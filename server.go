@@ -53,6 +53,7 @@ type Router interface {
 	Delete(uri string, handler ...interface{})
 	Head(uri string, handler ...interface{})
 	Options(uri string, handler ...interface{})
+	NotFound(handler http.Handler)
 }
 
 /****************** Handler *********************/
@@ -256,6 +257,7 @@ func (r *router) Patch(uri string, handler ...interface{})   { r.Method("PATCH",
 func (r *router) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
 func (r *router) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
 func (r *router) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
+func (r *router) NotFound(handler http.Handler)              { r.basic.NotFound = handler }
 
 type notFoundHandler struct{}
 
