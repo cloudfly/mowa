@@ -5,11 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path"
+	"strings"
+
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 )
+
+var (
+	debug bool
+)
+
+func init() {
+	if strings.ToLower(os.Getenv("MOWA_DEBUG")) == "true" {
+		debug = true
+		log.SetLevel(log.DebugLevel)
+	}
+}
 
 /************ API Server **************/
 
@@ -118,17 +133,19 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
-			if r := recover(); r != nil {
-				errs := ""
-				switch rr := r.(type) {
-				case string:
-					errs = rr
-				case error:
-					errs = rr.Error()
+			if !debug {
+				if r := recover(); r != nil {
+					errs := ""
+					switch rr := r.(type) {
+					case string:
+						errs = rr
+					case error:
+						errs = rr.Error()
+					}
+					b, _ := json.Marshal(NewError(500, errs))
+					c.Writer.WriteHeader(500)
+					c.Writer.Write(b)
 				}
-				b, _ := json.Marshal(NewError(500, errs))
-				c.Writer.WriteHeader(500)
-				c.Writer.Write(b)
 			}
 		}()
 
@@ -200,7 +217,9 @@ func (r *router) ServeFiles(uri string, root http.FileSystem) {
 }
 
 func (r *router) setHook(i int, hooks ...interface{}) Router {
-	r.hooks[i] = make([]Handler, 0, len(hooks))
+	if r.hooks[i] == nil {
+		r.hooks[i] = make([]Handler, 0, len(hooks))
+	}
 	for _, hook := range hooks {
 		h, err := NewHandler(hook)
 		if err != nil {
