@@ -143,6 +143,7 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 						errs = rr.Error()
 					}
 					b, _ := json.Marshal(NewError(500, errs))
+					c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 					c.Writer.WriteHeader(500)
 					c.Writer.Write(b)
 				}
@@ -173,6 +174,7 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 			if err != nil {
 				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
 			}
+			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			c.Writer.WriteHeader(c.Code)
 			c.Writer.Write(content)
 		}
