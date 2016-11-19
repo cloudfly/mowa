@@ -38,9 +38,12 @@ type Mowa struct {
 }
 
 // New create a new http server
-func New() *Mowa {
+func New(ctx context.Context) *Mowa {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s := &Mowa{
-		Router: newRouter(),
+		Router: newRouter(ctx),
 		server: new(http.Server),
 	}
 	s.server.Handler = s
@@ -117,11 +120,11 @@ func NewHandler(f interface{}) (Handler, error) {
 	return Handler{}, errors.New("invalid function type for handler")
 }
 
-func httpRouterHandle(handlers []Handler) httprouter.Handle {
+func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle {
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c = &Context{
-				Context: context.TODO(),
+				Context: ctx,
 				Request: req,
 				Writer:  rw,
 				Code:    500,
@@ -185,14 +188,16 @@ func httpRouterHandle(handlers []Handler) httprouter.Handle {
 
 // router is default router type, a realization of Router interface
 type router struct {
+	ctx    context.Context
 	basic  *httprouter.Router
 	prefix string
 	hooks  [2][]Handler // hooks[0] is pre run handler, hooks[1] is post run handler
 }
 
 // newRouter create a default router
-func newRouter(hooks ...[]Handler) *router {
+func newRouter(ctx context.Context, hooks ...[]Handler) *router {
 	r := &router{
+		ctx:    ctx,
 		basic:  httprouter.New(),
 		prefix: "/",
 	}
@@ -268,7 +273,7 @@ func (r *router) Method(method, uri string, handler ...interface{}) {
 		handlers = append(handlers, tmp)
 	}
 	handlers = append(handlers, r.hooks[1]...)
-	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(handlers))
+	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(r.ctx, handlers))
 }
 
 func (r *router) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
