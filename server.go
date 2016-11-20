@@ -124,7 +124,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c = &Context{
-				Context: ctx,
+				Context: context.WithValue(ctx, "params", ps),
 				Request: req,
 				Writer:  rw,
 				Code:    500,
@@ -132,7 +132,6 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 			}
 			b bool
 		)
-		c.Context = context.WithValue(c.Context, "params", ps)
 
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
