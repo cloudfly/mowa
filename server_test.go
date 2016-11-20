@@ -1,6 +1,7 @@
 package mowa
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -36,7 +37,7 @@ func handle3(c *Context) (int, interface{}) {
 }
 
 func TestServer(t *testing.T) {
-	api := New()
+	api := New(context.Background())
 	go api.Run(":10000")
 	api.Get("/test", func(c *Context) (int, interface{}) {
 		return 200, "test"
@@ -54,7 +55,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestServeHTTP(t *testing.T) {
-	router := newRouter()
+	router := newRouter(context.Background())
 	router.Group("/api/v1").Get("/chen", handle1)
 	router.Get("/yun", handle2)
 	router.Get("/fei/:age", handle3)
