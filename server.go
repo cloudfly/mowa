@@ -20,7 +20,7 @@ var (
 )
 
 func init() {
-	if strings.ToLower(os.Getenv("MOWA_DEBUG")) == "true" {
+	if strings.ToLower(os.Getenv("MOWA_DEBUG")) != "" {
 		debug = true
 		log.SetLevel(log.DebugLevel)
 	}
