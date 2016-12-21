@@ -1,6 +1,7 @@
 package mowa
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
 )
 
 /************ API Server **************/
@@ -234,6 +234,7 @@ func (r *router) PostHook(hooks ...interface{}) Router { return r.setHook(1, hoo
 // Group create a router group with the uri prefix
 func (r *router) Group(prefix string, hooks ...[]Handler) Router {
 	gr := &router{
+		ctx:    r.ctx,
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
