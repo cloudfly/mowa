@@ -5,26 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path"
-	"strings"
+	"runtime"
 
-	log "github.com/Sirupsen/logrus"
-
+	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 )
-
-var (
-	debug bool
-)
-
-func init() {
-	if strings.ToLower(os.Getenv("MOWA_DEBUG")) != "" {
-		debug = true
-		log.SetLevel(log.DebugLevel)
-	}
-}
 
 /************ API Server **************/
 
@@ -135,20 +122,22 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
-			if !debug {
-				if r := recover(); r != nil {
-					errs := ""
-					switch rr := r.(type) {
-					case string:
-						errs = rr
-					case error:
-						errs = rr.Error()
-					}
-					b, _ := json.Marshal(NewError(500, errs))
-					c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-					c.Writer.WriteHeader(500)
-					c.Writer.Write(b)
+			if r := recover(); r != nil {
+				errs := ""
+				switch rr := r.(type) {
+				case string:
+					errs = rr
+				case error:
+					errs = rr.Error()
 				}
+				b, _ := json.Marshal(NewError(500, errs))
+				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+				c.Writer.WriteHeader(500)
+				c.Writer.Write(b)
+
+				buf := make([]byte, 1024*64)
+				runtime.Stack(buf, false)
+				log.Error("%s", buf)
 			}
 		}()
 
