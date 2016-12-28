@@ -1,30 +1,17 @@
 package mowa
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path"
-	"strings"
+	"runtime"
 
-	log "github.com/Sirupsen/logrus"
-
+	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
 )
-
-var (
-	debug bool
-)
-
-func init() {
-	if strings.ToLower(os.Getenv("MOWA_DEBUG")) == "true" {
-		debug = true
-		log.SetLevel(log.DebugLevel)
-	}
-}
 
 /************ API Server **************/
 
@@ -135,20 +122,22 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
-			if !debug {
-				if r := recover(); r != nil {
-					errs := ""
-					switch rr := r.(type) {
-					case string:
-						errs = rr
-					case error:
-						errs = rr.Error()
-					}
-					b, _ := json.Marshal(NewError(500, errs))
-					c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-					c.Writer.WriteHeader(500)
-					c.Writer.Write(b)
+			if r := recover(); r != nil {
+				errs := ""
+				switch rr := r.(type) {
+				case string:
+					errs = rr
+				case error:
+					errs = rr.Error()
 				}
+				b, _ := json.Marshal(NewError(500, errs))
+				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+				c.Writer.WriteHeader(500)
+				c.Writer.Write(b)
+
+				buf := make([]byte, 1024*64)
+				runtime.Stack(buf, false)
+				log.Error("%s", buf)
 			}
 		}()
 
@@ -245,6 +234,7 @@ func (r *router) PostHook(hooks ...interface{}) Router { return r.setHook(1, hoo
 // Group create a router group with the uri prefix
 func (r *router) Group(prefix string, hooks ...[]Handler) Router {
 	gr := &router{
+		ctx:    r.ctx,
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
