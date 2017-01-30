@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"path"
 	"runtime"
 
@@ -203,7 +204,26 @@ func newRouter(ctx context.Context, hooks ...[]Handler) *router {
 }
 
 func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	r.basic.ServeHTTP(rw, req)
+	switch req.URL.Path {
+	case "/_/debug/pprof/cmdline":
+		pprof.Cmdline(rw, req)
+	case "/_/debug/pprof/symbol":
+		pprof.Symbol(rw, req)
+	case "/_/debug/pprof/profile":
+		pprof.Profile(rw, req)
+	case "/_/debug/pprof/trace":
+		pprof.Trace(rw, req)
+	case "/_/debug/pprof/goroutine":
+		pprof.Handler("goroutine").ServeHTTP(rw, req)
+	case "/_/debug/pprof/heap":
+		pprof.Handler("heap").ServeHTTP(rw, req)
+	case "/_/debug/pprof/block":
+		pprof.Handler("block").ServeHTTP(rw, req)
+	case "/_/debug/pprof/threadcreate":
+		pprof.Handler("threadcreate").ServeHTTP(rw, req)
+	default:
+		r.basic.ServeHTTP(rw, req)
+	}
 }
 
 // ServeFiles serve the static files
