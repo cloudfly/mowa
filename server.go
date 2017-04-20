@@ -49,17 +49,17 @@ func (api *Mowa) Run(addr string) error {
 type Router interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 	ServeFiles(uri string, root http.FileSystem)
-	PreHook(hooks ...interface{}) Router
-	PostHook(hooks ...interface{}) Router
+	Before(hooks ...interface{}) Router
+	After(hooks ...interface{}) Router
 	Group(prefix string, hooks ...[]Handler) Router
-	Get(uri string, handler ...interface{})
-	Post(uri string, handler ...interface{})
-	Put(uri string, handler ...interface{})
-	Patch(uri string, handler ...interface{})
-	Delete(uri string, handler ...interface{})
-	Head(uri string, handler ...interface{})
-	Options(uri string, handler ...interface{})
-	NotFound(handler http.Handler)
+	Get(uri string, handler ...interface{}) Router
+	Post(uri string, handler ...interface{}) Router
+	Put(uri string, handler ...interface{}) Router
+	Patch(uri string, handler ...interface{}) Router
+	Delete(uri string, handler ...interface{}) Router
+	Head(uri string, handler ...interface{}) Router
+	Options(uri string, handler ...interface{}) Router
+	NotFound(handler http.Handler) Router
 }
 
 /****************** Handler *********************/
@@ -245,11 +245,11 @@ func (r *router) setHook(i int, hooks ...interface{}) Router {
 	return r
 }
 
-// PreHook set the pre hook for router, prehook will run before handlers
-func (r *router) PreHook(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
+// Before set the pre hook for router, Before will run before handlers
+func (r *router) Before(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
 
-// PostHook set the post hook for router, posthook will run after handlers
-func (r *router) PostHook(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
+// After set the post hook for router, After will run after handlers
+func (r *router) After(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
 
 // Group create a router group with the uri prefix
 func (r *router) Group(prefix string, hooks ...[]Handler) Router {
@@ -271,7 +271,7 @@ func (r *router) Group(prefix string, hooks ...[]Handler) Router {
 }
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
-func (r *router) Method(method, uri string, handler ...interface{}) {
+func (r *router) Method(method, uri string, handler ...interface{}) Router {
 	handlers := make([]Handler, 0, len(r.hooks[0])+len(handler)+len(r.hooks[1]))
 	handlers = append(handlers, r.hooks[0]...)
 	for _, h := range handler {
@@ -283,16 +283,31 @@ func (r *router) Method(method, uri string, handler ...interface{}) {
 	}
 	handlers = append(handlers, r.hooks[1]...)
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(r.ctx, handlers))
+	return r
 }
 
-func (r *router) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
-func (r *router) Post(uri string, handler ...interface{})    { r.Method("POST", uri, handler...) }
-func (r *router) Put(uri string, handler ...interface{})     { r.Method("PUT", uri, handler...) }
-func (r *router) Patch(uri string, handler ...interface{})   { r.Method("PATCH", uri, handler...) }
-func (r *router) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
-func (r *router) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
-func (r *router) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
-func (r *router) NotFound(handler http.Handler)              { r.basic.NotFound = handler }
+func (r *router) Get(uri string, handler ...interface{}) Router {
+	return r.Method("GET", uri, handler...)
+}
+func (r *router) Post(uri string, handler ...interface{}) Router {
+	return r.Method("POST", uri, handler...)
+}
+func (r *router) Put(uri string, handler ...interface{}) Router {
+	return r.Method("PUT", uri, handler...)
+}
+func (r *router) Patch(uri string, handler ...interface{}) Router {
+	return r.Method("PATCH", uri, handler...)
+}
+func (r *router) Delete(uri string, handler ...interface{}) Router {
+	return r.Method("DELETE", uri, handler...)
+}
+func (r *router) Head(uri string, handler ...interface{}) Router {
+	return r.Method("HEAD", uri, handler...)
+}
+func (r *router) Options(uri string, handler ...interface{}) Router {
+	return r.Method("OPTIONS", uri, handler...)
+}
+func (r *router) NotFound(handler http.Handler) Router { r.basic.NotFound = handler; return r }
 
 type notFoundHandler struct{}
 
