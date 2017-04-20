@@ -25,8 +25,7 @@ func postLog(c *mowa.Context) {
 
 func main() {
 	api := mowa.New()
-	api.PreHook(preLog)
-	api.PostHook(postLog)
+	api.Before(preLog).After(postLog)
 
 	api.Get("/debug", func(c *mowa.Context) (int, interface{}, bool) {
 		return 200, "debug", true
