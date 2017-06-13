@@ -116,7 +116,9 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 				Code:    500,
 				Data:    "",
 			}
-			b bool
+			content []byte
+			err     error
+			b       bool
 		)
 
 		// defer to recover in case of some panic, assert in context use this
@@ -160,10 +162,15 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 		}
 	RETURN:
 		if c.Data != nil {
-			content, err := json.Marshal(c.Data)
-			if err != nil {
-				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
+			if s, ok := c.Data.(string); ok {
+				content = []byte(s)
+			} else {
+				content, err = json.Marshal(c.Data)
+				if err != nil {
+					content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
+				}
 			}
+
 			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			c.Writer.WriteHeader(c.Code)
 			c.Writer.Write(content)
