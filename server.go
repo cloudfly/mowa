@@ -164,6 +164,8 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 		if c.Data != nil {
 			if s, ok := c.Data.(string); ok {
 				content = []byte(s)
+			} else if bs, ok := c.Data.([]byte); ok {
+				content = bs
 			} else {
 				content, err = json.Marshal(c.Data)
 				if err != nil {
