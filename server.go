@@ -9,6 +9,7 @@ import (
 	"net/http/pprof"
 	"path"
 	"runtime"
+	"time"
 
 	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
@@ -21,6 +22,7 @@ type Mowa struct {
 	Router        // the router of server
 	Addr   string // the address to listen on
 	server *http.Server
+	ctx    context.Context
 }
 
 // New create a new http server
@@ -31,6 +33,7 @@ func New(ctx context.Context) *Mowa {
 	s := &Mowa{
 		Router: newRouter(ctx),
 		server: new(http.Server),
+		ctx:    ctx,
 	}
 	s.server.Handler = s
 	return s
@@ -40,6 +43,13 @@ func New(ctx context.Context) *Mowa {
 func (api *Mowa) Run(addr string) error {
 	api.server.Addr = addr
 	return api.server.ListenAndServe()
+}
+
+// Shutdown the server gracefully
+func (api *Mowa) Shutdown(timeout time.Duration) error {
+	c, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return api.server.Shutdown(c)
 }
 
 // The Router used by server
