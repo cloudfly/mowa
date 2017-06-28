@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"time"
 
+	"net"
+
 	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
 )
@@ -19,10 +21,11 @@ import (
 
 // Mowa represent a http server
 type Mowa struct {
-	Router        // the router of server
-	Addr   string // the address to listen on
-	server *http.Server
-	ctx    context.Context
+	Router          // the router of server
+	Addr     string // the address to listen on
+	server   *http.Server
+	ctx      context.Context
+	listener net.Listener
 }
 
 // New create a new http server
@@ -41,8 +44,18 @@ func New(ctx context.Context) *Mowa {
 
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
-	api.server.Addr = addr
-	return api.server.ListenAndServe()
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	listener, err := net.ListenTCP("tcp4", tcpAddr)
+	if err != nil {
+		return err
+	}
+	api.listener = listener
+
+	return api.server.Serve(api.listener)
 }
 
 // Shutdown the server gracefully
@@ -50,6 +63,11 @@ func (api *Mowa) Shutdown(timeout time.Duration) error {
 	c, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return api.server.Shutdown(c)
+}
+
+// Listener return the net.TCPListener http service serve on
+func (api *Mowa) Listener() net.Listener {
+	return api.listener
 }
 
 // The Router used by server
