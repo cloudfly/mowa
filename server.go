@@ -13,6 +13,8 @@ import (
 
 	"net"
 
+	"sync"
+
 	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
 )
@@ -21,6 +23,7 @@ import (
 
 // Mowa represent a http server
 type Mowa struct {
+	sync.Mutex
 	Router          // the router of server
 	Addr     string // the address to listen on
 	server   *http.Server
@@ -44,22 +47,28 @@ func New(ctx context.Context) *Mowa {
 
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
+	api.Lock() // lock the api in case of Shutdown() before Serving it
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
+		api.Unlock()
 		return err
 	}
 
 	listener, err := net.ListenTCP("tcp4", tcpAddr)
 	if err != nil {
+		api.Unlock()
 		return err
 	}
 	api.listener = listener
+	api.Unlock()
 
 	return api.server.Serve(api.listener)
 }
 
 // Shutdown the server gracefully
 func (api *Mowa) Shutdown(timeout time.Duration) error {
+	api.Lock()
+	defer api.Unlock()
 	c, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return api.server.Shutdown(c)
@@ -67,6 +76,8 @@ func (api *Mowa) Shutdown(timeout time.Duration) error {
 
 // Listener return the net.TCPListener http service serve on
 func (api *Mowa) Listener() net.Listener {
+	api.Lock()
+	defer api.Unlock()
 	return api.listener
 }
 
