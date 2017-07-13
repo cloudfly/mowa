@@ -29,6 +29,18 @@ func (c *Context) Int(name string, i int) int {
 	return i
 }
 
+// Int64 get a integer argument from request by `name`, if not found, return `i`
+func (c *Context) Int64(name string, i int64) int64 {
+	params := c.Value("params").(httprouter.Params)
+	if v := params.ByName(name); v != "" {
+		if j, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return j
+		}
+		return i
+	}
+	return i
+}
+
 // Query get a string argument from url-query by `name`, if not found, return `str`
 func (c *Context) Query(name, str string) string {
 	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
