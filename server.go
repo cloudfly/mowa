@@ -65,6 +65,14 @@ func (api *Mowa) Run(addr string) error {
 	return api.server.Serve(api.listener)
 }
 
+// RunWithListener serve the http service using the given listener
+func (api *Mowa) RunWithListener(listener net.Listener) error {
+	api.Lock()
+	api.listener = listener
+	api.Unlock()
+	return api.server.Serve(api.listener)
+}
+
 // Shutdown the server gracefully
 func (api *Mowa) Shutdown(timeout time.Duration) error {
 	api.Lock()
