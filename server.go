@@ -6,8 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"path"
 	"runtime"
+	"time"
+
+	"net"
+
+	"sync"
 
 	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
@@ -17,11 +23,12 @@ import (
 
 // Mowa represent a http server
 type Mowa struct {
-	// the router of server
-	Router
-	// the address to listen on
-	Addr   string
-	server *http.Server
+	sync.Mutex
+	Router          // the router of server
+	Addr     string // the address to listen on
+	server   *http.Server
+	ctx      context.Context
+	listener net.Listener
 }
 
 // New create a new http server
@@ -32,6 +39,7 @@ func New(ctx context.Context) *Mowa {
 	s := &Mowa{
 		Router: newRouter(ctx),
 		server: new(http.Server),
+		ctx:    ctx,
 	}
 	s.server.Handler = s
 	return s
@@ -39,29 +47,56 @@ func New(ctx context.Context) *Mowa {
 
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
-	api.server.Addr = addr
-	println("Starting serve on", addr)
-	return api.server.ListenAndServe()
+	api.Lock() // lock the api in case of Shutdown() before Serving it
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		api.Unlock()
+		return err
+	}
+
+	listener, err := net.ListenTCP("tcp4", tcpAddr)
+	if err != nil {
+		api.Unlock()
+		return err
+	}
+	api.listener = listener
+	api.Unlock()
+
+	return api.server.Serve(api.listener)
+}
+
+// Shutdown the server gracefully
+func (api *Mowa) Shutdown(timeout time.Duration) error {
+	api.Lock()
+	defer api.Unlock()
+	c, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return api.server.Shutdown(c)
+}
+
+// Listener return the net.TCPListener http service serve on
+func (api *Mowa) Listener() net.Listener {
+	api.Lock()
+	defer api.Unlock()
+	return api.listener
 }
 
 // The Router used by server
 type Router interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 	ServeFiles(uri string, root http.FileSystem)
-	PreHook(hooks ...interface{}) Router
-	PostHook(hooks ...interface{}) Router
+	Before(hooks ...interface{}) Router
+	After(hooks ...interface{}) Router
 	Group(prefix string, hooks ...[]Handler) Router
-	Get(uri string, handler ...interface{})
-	Post(uri string, handler ...interface{})
-	Put(uri string, handler ...interface{})
-	Patch(uri string, handler ...interface{})
-	Delete(uri string, handler ...interface{})
-	Head(uri string, handler ...interface{})
-	Options(uri string, handler ...interface{})
-	NotFound(handler http.Handler)
+	Get(uri string, handler ...interface{}) Router
+	Post(uri string, handler ...interface{}) Router
+	Put(uri string, handler ...interface{}) Router
+	Patch(uri string, handler ...interface{}) Router
+	Delete(uri string, handler ...interface{}) Router
+	Head(uri string, handler ...interface{}) Router
+	Options(uri string, handler ...interface{}) Router
+	NotFound(handler http.Handler) Router
 }
-
-/****************** Handler *********************/
 
 // Context in every request
 type Context struct {
@@ -76,6 +111,8 @@ type Context struct {
 	Data interface{}
 }
 
+/****************** Handler *********************/
+
 // Handler is the server handler type
 type Handler struct {
 	t  int
@@ -85,24 +122,25 @@ type Handler struct {
 	h3 func(c *Context) (int, interface{}, bool)
 }
 
+// handler types
 const (
-	handlerType0 = iota
-	handlerType1
-	handlerType2
-	handlerType3
+	ht0 = iota
+	ht1
+	ht2
+	ht3
 )
 
 // NewHandler create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
 	switch f.(type) {
 	case func(c *Context):
-		return Handler{t: handlerType0, h0: f.(func(c *Context))}, nil
+		return Handler{t: ht0, h0: f.(func(c *Context))}, nil
 	case func(c *Context) interface{}:
-		return Handler{t: handlerType1, h1: f.(func(c *Context) interface{})}, nil
+		return Handler{t: ht1, h1: f.(func(c *Context) interface{})}, nil
 	case func(c *Context) (int, interface{}):
-		return Handler{t: handlerType2, h2: f.(func(c *Context) (int, interface{}))}, nil
+		return Handler{t: ht2, h2: f.(func(c *Context) (int, interface{}))}, nil
 	case func(c *Context) (int, interface{}, bool):
-		return Handler{t: handlerType3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
+		return Handler{t: ht3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
 	}
 	return Handler{}, errors.New("invalid function type for handler")
 }
@@ -146,13 +184,13 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 		// run handler
 		for _, handler := range handlers {
 			switch handler.t {
-			case handlerType0:
+			case ht0:
 				handler.h0(c)
-			case handlerType1:
+			case ht1:
 				c.Code, c.Data = 200, handler.h1(c)
-			case handlerType2:
+			case ht2:
 				c.Code, c.Data = handler.h2(c)
-			case handlerType3:
+			case ht3:
 				c.Code, c.Data, b = handler.h3(c)
 				if b {
 					goto RETURN
@@ -165,6 +203,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 			if err != nil {
 				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
 			}
+
 			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			c.Writer.WriteHeader(c.Code)
 			c.Writer.Write(content)
@@ -183,27 +222,38 @@ type router struct {
 }
 
 // newRouter create a default router
-func newRouter(ctx context.Context, hooks ...[]Handler) *router {
+func newRouter(ctx context.Context) *router {
 	r := &router{
 		ctx:    ctx,
 		basic:  httprouter.New(),
 		prefix: "/",
+		hooks:  [2][]Handler{nil, nil},
 	}
 	r.basic.NotFound = new(notFoundHandler)
-
-	// set hooks
-	for i := 0; i < 2; i++ {
-		if i < len(hooks) && hooks[i] != nil {
-			r.hooks[i] = hooks[i]
-		} else {
-			r.hooks[i] = make([]Handler, 0)
-		}
-	}
 	return r
 }
 
 func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	r.basic.ServeHTTP(rw, req)
+	switch req.URL.Path {
+	case "/_/debug/pprof/cmdline":
+		pprof.Cmdline(rw, req)
+	case "/_/debug/pprof/symbol":
+		pprof.Symbol(rw, req)
+	case "/_/debug/pprof/profile":
+		pprof.Profile(rw, req)
+	case "/_/debug/pprof/trace":
+		pprof.Trace(rw, req)
+	case "/_/debug/pprof/goroutine":
+		pprof.Handler("goroutine").ServeHTTP(rw, req)
+	case "/_/debug/pprof/heap":
+		pprof.Handler("heap").ServeHTTP(rw, req)
+	case "/_/debug/pprof/block":
+		pprof.Handler("block").ServeHTTP(rw, req)
+	case "/_/debug/pprof/threadcreate":
+		pprof.Handler("threadcreate").ServeHTTP(rw, req)
+	default:
+		r.basic.ServeHTTP(rw, req)
+	}
 }
 
 // ServeFiles serve the static files
@@ -212,9 +262,6 @@ func (r *router) ServeFiles(uri string, root http.FileSystem) {
 }
 
 func (r *router) setHook(i int, hooks ...interface{}) Router {
-	if r.hooks[i] == nil {
-		r.hooks[i] = make([]Handler, 0, len(hooks))
-	}
 	for _, hook := range hooks {
 		h, err := NewHandler(hook)
 		if err != nil {
@@ -225,11 +272,34 @@ func (r *router) setHook(i int, hooks ...interface{}) Router {
 	return r
 }
 
-// PreHook set the pre hook for router, prehook will run before handlers
-func (r *router) PreHook(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
+// Before set the pre hook for router, Before will run before handlers
+func (r *router) Before(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
 
-// PostHook set the post hook for router, posthook will run after handlers
-func (r *router) PostHook(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
+// After set the post hook for router, After will run after handlers
+func (r *router) After(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
+
+func (r *router) Get(uri string, handler ...interface{}) Router {
+	return r.Method("GET", uri, handler...)
+}
+func (r *router) Post(uri string, handler ...interface{}) Router {
+	return r.Method("POST", uri, handler...)
+}
+func (r *router) Put(uri string, handler ...interface{}) Router {
+	return r.Method("PUT", uri, handler...)
+}
+func (r *router) Patch(uri string, handler ...interface{}) Router {
+	return r.Method("PATCH", uri, handler...)
+}
+func (r *router) Delete(uri string, handler ...interface{}) Router {
+	return r.Method("DELETE", uri, handler...)
+}
+func (r *router) Head(uri string, handler ...interface{}) Router {
+	return r.Method("HEAD", uri, handler...)
+}
+func (r *router) Options(uri string, handler ...interface{}) Router {
+	return r.Method("OPTIONS", uri, handler...)
+}
+func (r *router) NotFound(handler http.Handler) Router { r.basic.NotFound = handler; return r }
 
 // Group create a router group with the uri prefix
 func (r *router) Group(prefix string, hooks ...[]Handler) Router {
@@ -251,9 +321,9 @@ func (r *router) Group(prefix string, hooks ...[]Handler) Router {
 }
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
-func (r *router) Method(method, uri string, handler ...interface{}) {
+func (r *router) Method(method, uri string, handler ...interface{}) Router {
 	handlers := make([]Handler, 0, len(r.hooks[0])+len(handler)+len(r.hooks[1]))
-	handlers = append(handlers, r.hooks[0]...)
+	handlers = append(handlers, r.hooks[0]...) // run before
 	for _, h := range handler {
 		tmp, err := NewHandler(h)
 		if err != nil {
@@ -261,18 +331,10 @@ func (r *router) Method(method, uri string, handler ...interface{}) {
 		}
 		handlers = append(handlers, tmp)
 	}
-	handlers = append(handlers, r.hooks[1]...)
+	handlers = append(handlers, r.hooks[1]...) // run after
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandle(r.ctx, handlers))
+	return r
 }
-
-func (r *router) Get(uri string, handler ...interface{})     { r.Method("GET", uri, handler...) }
-func (r *router) Post(uri string, handler ...interface{})    { r.Method("POST", uri, handler...) }
-func (r *router) Put(uri string, handler ...interface{})     { r.Method("PUT", uri, handler...) }
-func (r *router) Patch(uri string, handler ...interface{})   { r.Method("PATCH", uri, handler...) }
-func (r *router) Delete(uri string, handler ...interface{})  { r.Method("DELETE", uri, handler...) }
-func (r *router) Head(uri string, handler ...interface{})    { r.Method("HEAD", uri, handler...) }
-func (r *router) Options(uri string, handler ...interface{}) { r.Method("OPTIONS", uri, handler...) }
-func (r *router) NotFound(handler http.Handler)              { r.basic.NotFound = handler }
 
 type notFoundHandler struct{}
 
@@ -286,10 +348,8 @@ func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Error is the server error type
 type Error struct {
-	// the error code, http code encouraged
-	Code int `json:"code"`
-	// the error message
-	Msg string `json:"msg"`
+	Code int    `json:"code"` // the error code, http code encouraged
+	Msg  string `json:"msg"`  // the error message
 }
 
 // NewError create a new error
@@ -297,6 +357,4 @@ func NewError(code int, format string, v ...interface{}) error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, v...)}
 }
 
-func (err *Error) Error() string {
-	return err.Msg
-}
+func (err *Error) Error() string { return err.Msg }

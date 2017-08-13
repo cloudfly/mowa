@@ -1,14 +1,14 @@
 package mowa
 
 import (
-	"fmt"
-	"github.com/julienschmidt/httprouter"
 	"io/ioutil"
 	"reflect"
 	"strconv"
+
+	"github.com/julienschmidt/httprouter"
 )
 
-// get a string argument from request by `name`, if not found, return `str`
+// String get a string argument from request by `name`, if not found, return `str`
 func (c *Context) String(name, str string) string {
 	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
@@ -17,20 +17,31 @@ func (c *Context) String(name, str string) string {
 	return str
 }
 
-// get a integer argument from request by `name`, if not found, return `i`
+// Int get a integer argument from request by `name`, if not found, return `i`
 func (c *Context) Int(name string, i int) int {
 	params := c.Value("params").(httprouter.Params)
 	if v := params.ByName(name); v != "" {
-		if j, err := strconv.Atoi(v); err != nil {
-			return i
-		} else {
+		if j, err := strconv.Atoi(v); err == nil {
 			return j
 		}
+		return i
 	}
 	return i
 }
 
-// get a string argument from url-query by `name`, if not found, return `str`
+// Int64 get a integer argument from request by `name`, if not found, return `i`
+func (c *Context) Int64(name string, i int64) int64 {
+	params := c.Value("params").(httprouter.Params)
+	if v := params.ByName(name); v != "" {
+		if j, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return j
+		}
+		return i
+	}
+	return i
+}
+
+// Query get a string argument from url-query by `name`, if not found, return `str`
 func (c *Context) Query(name, str string) string {
 	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
 		return ret
@@ -38,7 +49,7 @@ func (c *Context) Query(name, str string) string {
 	return str
 }
 
-// get a slice argument from url-query by `name`, if not found, return `slice`
+// QuerySlice get a slice argument from url-query by `name`, if not found, return `slice`
 func (c *Context) QuerySlice(name string, slice []string) []string {
 	if ret, ok := c.Request.URL.Query()[name]; ok {
 		return ret
@@ -46,7 +57,7 @@ func (c *Context) QuerySlice(name string, slice []string) []string {
 	return slice
 }
 
-// get the request body
+// ReadBody read the content from request body
 func (c *Context) ReadBody() []byte {
 	content, err := ioutil.ReadAll(c.Request.Body)
 	c.Request.Body.Close()
@@ -56,44 +67,7 @@ func (c *Context) ReadBody() []byte {
 	return content
 }
 
-// assert function
-
-// AssertErr assert if err is a nil value, panic if not
-func (c *Context) AssertErr(err error) {
-	if err != nil {
-		panic(err.Error())
-	}
-}
-
-// assert if v is a nil value, panic if not
-func (c *Context) AssertNil(v interface{}) {
-	if v != nil {
-		panic(fmt.Errorf("%v is not nil", v))
-	}
-}
-
-// assert if v is not a nil value, panic if it is
-func (c *Context) AssertNotNil(v interface{}) {
-	if v == nil {
-		panic(fmt.Errorf("%v is nil", v))
-	}
-}
-
-// assert if v1 == v2, panic if not. here using reflect.DeepEqual() to check equation
-func (c *Context) AssertEqual(v1, v2 interface{}) {
-	if !reflect.DeepEqual(v1, v2) {
-		panic(fmt.Errorf("%v and %v is not equal", v1, v2))
-	}
-}
-
-// assert if v1 != v2, panic if equal. here using reflect.DeepEqual() to check equal
-func (c *Context) AssertNotEqual(v1, v2 interface{}) {
-	if reflect.DeepEqual(v1, v2) {
-		panic(fmt.Errorf("%v and %v is equal", v1, v2))
-	}
-}
-
-// assert if v is empty, return true if it is
+// IsEmpty check if v is empty, return true if it is
 // empty means:
 // 1. zero for number, int or float
 // 2. zero length for string,chan,map and array.
@@ -118,18 +92,4 @@ func (c *Context) IsEmpty(v interface{}) bool {
 		return false
 	}
 
-}
-
-// assert if v is empty, panic if not
-func (c *Context) AssertEmpty(v interface{}) {
-	if !c.IsEmpty(v) {
-		panic(fmt.Errorf("%v is not a zero value", v))
-	}
-}
-
-// assert if v is not empty, panic if it is
-func (c *Context) AssertNotEmpty(v interface{}) {
-	if c.IsEmpty(v) {
-		panic(fmt.Errorf("%v is a zero value", v))
-	}
 }
