@@ -235,21 +235,21 @@ func newRouter(ctx context.Context) *router {
 
 func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
-	case "/_/debug/pprof/cmdline":
+	case "/debug/pprof/cmdline":
 		pprof.Cmdline(rw, req)
-	case "/_/debug/pprof/symbol":
+	case "/debug/pprof/symbol":
 		pprof.Symbol(rw, req)
-	case "/_/debug/pprof/profile":
+	case "/debug/pprof/profile":
 		pprof.Profile(rw, req)
-	case "/_/debug/pprof/trace":
+	case "/debug/pprof/trace":
 		pprof.Trace(rw, req)
-	case "/_/debug/pprof/goroutine":
+	case "/debug/pprof/goroutine":
 		pprof.Handler("goroutine").ServeHTTP(rw, req)
-	case "/_/debug/pprof/heap":
+	case "/debug/pprof/heap":
 		pprof.Handler("heap").ServeHTTP(rw, req)
-	case "/_/debug/pprof/block":
+	case "/debug/pprof/block":
 		pprof.Handler("block").ServeHTTP(rw, req)
-	case "/_/debug/pprof/threadcreate":
+	case "/debug/pprof/threadcreate":
 		pprof.Handler("threadcreate").ServeHTTP(rw, req)
 	default:
 		r.basic.ServeHTTP(rw, req)
