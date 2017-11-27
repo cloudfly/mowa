@@ -45,7 +45,7 @@ func New(ctx context.Context) *Mowa {
 
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
-	api.Lock() // lock the api in case of Shutdown() before Serving it
+	api.Lock() // lock the api in case of calling Shutdown() before Serve()
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		api.Unlock()
@@ -106,7 +106,8 @@ type Context struct {
 	// the http code to response
 	Code int
 	// the data to response, the data will be format to json and written into response body
-	Data interface{}
+	Data   interface{}
+	params httprouter.Params
 }
 
 /****************** Handler *********************/
@@ -140,18 +141,19 @@ func NewHandler(f interface{}) (Handler, error) {
 	case func(c *Context) (int, interface{}, bool):
 		return Handler{t: ht3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
 	}
-	return Handler{}, errors.New("invalid function type for handler")
+	return Handler{}, errors.New("unvalid function type for handler")
 }
 
 func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle {
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c = &Context{
-				Context: context.WithValue(ctx, "params", ps),
+				Context: ctx,
 				Request: req,
 				Writer:  rw,
 				Code:    500,
 				Data:    "",
+				params:  ps,
 			}
 			b bool
 		)
@@ -173,13 +175,14 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 
 				buf := make([]byte, 1024*64)
 				runtime.Stack(buf, false)
-				log.Printf("%s", buf)
+				log.Printf("%s\n", buf)
 			}
 		}()
 
 		c.Request.ParseForm()
 
 		// run handler
+	HANDLER:
 		for _, handler := range handlers {
 			switch handler.t {
 			case ht0:
@@ -191,11 +194,11 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 			case ht3:
 				c.Code, c.Data, b = handler.h3(c)
 				if b {
-					goto RETURN
+					break HANDLER
 				}
 			}
 		}
-	RETURN:
+
 		if c.Data != nil {
 			content, err := json.Marshal(c.Data)
 			if err != nil {
@@ -351,8 +354,13 @@ func Data(data interface{}) DataBody {
 
 // Error return DataBody with given error message
 func Error(err interface{}) DataBody {
+	return ErrorWithCode(1, err)
+}
+
+// ErrorWithCode return DataBody with given error message
+func ErrorWithCode(code int, err interface{}) DataBody {
 	d := DataBody{
-		Code: 1,
+		Code: code,
 	}
 	switch e := err.(type) {
 	case error:
