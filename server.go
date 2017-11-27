@@ -5,17 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"path"
 	"runtime"
+	"sync"
 	"time"
 
-	"net"
-
-	"sync"
-
-	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -85,9 +83,9 @@ func (api *Mowa) Listener() net.Listener {
 type Router interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 	ServeFiles(uri string, root http.FileSystem)
-	Before(hooks ...interface{}) Router
-	After(hooks ...interface{}) Router
-	Group(prefix string, hooks ...[]Handler) Router
+	BeforeRequest(hooks ...interface{}) Router
+	AfterRequest(hooks ...interface{}) Router
+	Group(prefix string) Router
 	Get(uri string, handler ...interface{}) Router
 	Post(uri string, handler ...interface{}) Router
 	Put(uri string, handler ...interface{}) Router
@@ -115,7 +113,7 @@ type Context struct {
 
 // Handler is the server handler type
 type Handler struct {
-	t  int
+	t  rune
 	h0 func(c *Context)
 	h1 func(c *Context) interface{}
 	h2 func(c *Context) (int, interface{})
@@ -168,14 +166,14 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 				case error:
 					errs = rr.Error()
 				}
-				b, _ := json.Marshal(NewError(500, errs))
+				b, _ := json.Marshal(Error(errs))
 				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 				c.Writer.WriteHeader(500)
 				c.Writer.Write(b)
 
 				buf := make([]byte, 1024*64)
 				runtime.Stack(buf, false)
-				log.Error("%s", buf)
+				log.Printf("%s", buf)
 			}
 		}()
 
@@ -201,7 +199,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 		if c.Data != nil {
 			content, err := json.Marshal(c.Data)
 			if err != nil {
-				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
+				content, _ = json.Marshal(Error("json format error, " + err.Error()))
 			}
 
 			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -273,10 +271,10 @@ func (r *router) setHook(i int, hooks ...interface{}) Router {
 }
 
 // Before set the pre hook for router, Before will run before handlers
-func (r *router) Before(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
+func (r *router) BeforeRequest(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
 
 // After set the post hook for router, After will run after handlers
-func (r *router) After(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
+func (r *router) AfterRequest(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
 
 func (r *router) Get(uri string, handler ...interface{}) Router {
 	return r.Method("GET", uri, handler...)
@@ -302,22 +300,12 @@ func (r *router) Options(uri string, handler ...interface{}) Router {
 func (r *router) NotFound(handler http.Handler) Router { r.basic.NotFound = handler; return r }
 
 // Group create a router group with the uri prefix
-func (r *router) Group(prefix string, hooks ...[]Handler) Router {
-	gr := &router{
+func (r *router) Group(prefix string) Router {
+	return &router{
 		ctx:    r.ctx,
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
-	// combine parent hooks and given hooks
-	for i := 0; i < 2; i++ {
-		if i < len(hooks) && hooks[i] != nil { // having hook setting
-			gr.hooks[i] = append(r.hooks[i], hooks[i]...)
-		} else { // no hook setting, carry the parent's hook
-			gr.hooks[i] = make([]Handler, len(r.hooks[i]))
-			copy(gr.hooks[i], r.hooks[i])
-		}
-	}
-	return gr
 }
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
@@ -339,22 +327,42 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 type notFoundHandler struct{}
 
 func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	content, _ := json.Marshal(map[string]string{"code": "404", "msg": "page not found"})
+	content, _ := json.Marshal(map[string]string{"code": "404", "error": "page not found"})
 	w.WriteHeader(404)
 	w.Write(content)
 }
 
 /************* Error **************/
 
-// Error is the server error type
-type Error struct {
-	Code int    `json:"code"` // the error code, http code encouraged
-	Msg  string `json:"msg"`  // the error message
+// DataBody is a common response format
+type DataBody struct {
+	Code  int         `json:"code"`            // the error code, http code encouraged
+	Error string      `json:"error,emitempty"` // the error message
+	Data  interface{} `json:"data"`
 }
 
-// NewError create a new error
-func NewError(code int, format string, v ...interface{}) error {
-	return &Error{Code: code, Msg: fmt.Sprintf(format, v...)}
+// Data return the data body with given data
+func Data(data interface{}) DataBody {
+	return DataBody{
+		Code: 0,
+		Data: data,
+	}
 }
 
-func (err *Error) Error() string { return err.Msg }
+// Error return DataBody with given error message
+func Error(err interface{}) DataBody {
+	d := DataBody{
+		Code: 1,
+	}
+	switch e := err.(type) {
+	case error:
+		d.Error = e.Error()
+	case string:
+		d.Error = e
+	case []byte:
+		d.Error = string(e)
+	default:
+		d.Error = fmt.Sprintf("%v", e)
+	}
+	return d
+}
