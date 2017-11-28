@@ -3,9 +3,9 @@ Mowa
 
 [![GoDoc](http://godoc.org/github.com/cloudfly/mowa?status.svg)](http://godoc.org/github.com/cloudfly/mowa)
 
-This is a very very simple mini web framework written by golang.
+This is a very very simple mini web framework written by golang, mainly used by myself.
 
-##Demo
+## Demo
 
 ```golang
 package main
@@ -25,17 +25,19 @@ func postLog(c *mowa.Context) {
 
 func main() {
 	api := mowa.New()
-	api.Before(preLog).After(postLog)
+	api.BeforeRequest(preLog).AfterRequest(postLog)
 
-	api.Get("/debug", func(c *mowa.Context) (int, interface{}, bool) {
-		return 200, "debug", true
+
+    // always return http code 200
+	api.Get("/hello", func(c *mowa.Context) interface{} {
+		return "hello world! /hello"
 	})
 
 	v1 := api.Group("/api/v1")
 	v1.Get("/hello", func(c *mowa.Context) (int, interface{}) {
-		return 200, "hello world!"
+		return 202, "hello world! /api/v1/hello"
 	})
 
-	api.Run(":10000")
+	api.Run(":8080")
 }
 ```
