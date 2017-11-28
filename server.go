@@ -5,17 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"path"
 	"runtime"
+	"sync"
 	"time"
 
-	"net"
-
-	"sync"
-
-	"github.com/cloudfly/log"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -47,7 +45,7 @@ func New(ctx context.Context) *Mowa {
 
 // Run the server, and listen to given addr
 func (api *Mowa) Run(addr string) error {
-	api.Lock() // lock the api in case of Shutdown() before Serving it
+	api.Lock() // lock the api in case of calling Shutdown() before Serve()
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		api.Unlock()
@@ -93,9 +91,9 @@ func (api *Mowa) Listener() net.Listener {
 type Router interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 	ServeFiles(uri string, root http.FileSystem)
-	Before(hooks ...interface{}) Router
-	After(hooks ...interface{}) Router
-	Group(prefix string, hooks ...[]Handler) Router
+	BeforeRequest(hooks ...interface{}) Router
+	AfterRequest(hooks ...interface{}) Router
+	Group(prefix string) Router
 	Get(uri string, handler ...interface{}) Router
 	Post(uri string, handler ...interface{}) Router
 	Put(uri string, handler ...interface{}) Router
@@ -116,14 +114,15 @@ type Context struct {
 	// the http code to response
 	Code int
 	// the data to response, the data will be format to json and written into response body
-	Data interface{}
+	Data   interface{}
+	params httprouter.Params
 }
 
 /****************** Handler *********************/
 
 // Handler is the server handler type
 type Handler struct {
-	t  int
+	t  rune
 	h0 func(c *Context)
 	h1 func(c *Context) interface{}
 	h2 func(c *Context) (int, interface{})
@@ -150,18 +149,19 @@ func NewHandler(f interface{}) (Handler, error) {
 	case func(c *Context) (int, interface{}, bool):
 		return Handler{t: ht3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
 	}
-	return Handler{}, errors.New("invalid function type for handler")
+	return Handler{}, errors.New("unvalid function type for handler")
 }
 
 func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle {
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		var (
 			c = &Context{
-				Context: context.WithValue(ctx, "params", ps),
+				Context: ctx,
 				Request: req,
 				Writer:  rw,
 				Code:    500,
 				Data:    "",
+				params:  ps,
 			}
 			b bool
 		)
@@ -176,20 +176,21 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 				case error:
 					errs = rr.Error()
 				}
-				b, _ := json.Marshal(NewError(500, errs))
+				b, _ := json.Marshal(Error(errs))
 				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 				c.Writer.WriteHeader(500)
 				c.Writer.Write(b)
 
 				buf := make([]byte, 1024*64)
 				runtime.Stack(buf, false)
-				log.Error("%s", buf)
+				log.Printf("%s\n", buf)
 			}
 		}()
 
 		c.Request.ParseForm()
 
 		// run handler
+	HANDLER:
 		for _, handler := range handlers {
 			switch handler.t {
 			case ht0:
@@ -201,15 +202,15 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 			case ht3:
 				c.Code, c.Data, b = handler.h3(c)
 				if b {
-					goto RETURN
+					break HANDLER
 				}
 			}
 		}
-	RETURN:
+
 		if c.Data != nil {
 			content, err := json.Marshal(c.Data)
 			if err != nil {
-				content, _ = json.Marshal(NewError(500, "json format error", err.Error()))
+				content, _ = json.Marshal(Error("json format error, " + err.Error()))
 			}
 
 			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -243,21 +244,21 @@ func newRouter(ctx context.Context) *router {
 
 func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
-	case "/_/debug/pprof/cmdline":
+	case "/debug/pprof/cmdline":
 		pprof.Cmdline(rw, req)
-	case "/_/debug/pprof/symbol":
+	case "/debug/pprof/symbol":
 		pprof.Symbol(rw, req)
-	case "/_/debug/pprof/profile":
+	case "/debug/pprof/profile":
 		pprof.Profile(rw, req)
-	case "/_/debug/pprof/trace":
+	case "/debug/pprof/trace":
 		pprof.Trace(rw, req)
-	case "/_/debug/pprof/goroutine":
+	case "/debug/pprof/goroutine":
 		pprof.Handler("goroutine").ServeHTTP(rw, req)
-	case "/_/debug/pprof/heap":
+	case "/debug/pprof/heap":
 		pprof.Handler("heap").ServeHTTP(rw, req)
-	case "/_/debug/pprof/block":
+	case "/debug/pprof/block":
 		pprof.Handler("block").ServeHTTP(rw, req)
-	case "/_/debug/pprof/threadcreate":
+	case "/debug/pprof/threadcreate":
 		pprof.Handler("threadcreate").ServeHTTP(rw, req)
 	default:
 		r.basic.ServeHTTP(rw, req)
@@ -281,10 +282,10 @@ func (r *router) setHook(i int, hooks ...interface{}) Router {
 }
 
 // Before set the pre hook for router, Before will run before handlers
-func (r *router) Before(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
+func (r *router) BeforeRequest(hooks ...interface{}) Router { return r.setHook(0, hooks...) }
 
 // After set the post hook for router, After will run after handlers
-func (r *router) After(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
+func (r *router) AfterRequest(hooks ...interface{}) Router { return r.setHook(1, hooks...) }
 
 func (r *router) Get(uri string, handler ...interface{}) Router {
 	return r.Method("GET", uri, handler...)
@@ -310,22 +311,12 @@ func (r *router) Options(uri string, handler ...interface{}) Router {
 func (r *router) NotFound(handler http.Handler) Router { r.basic.NotFound = handler; return r }
 
 // Group create a router group with the uri prefix
-func (r *router) Group(prefix string, hooks ...[]Handler) Router {
-	gr := &router{
+func (r *router) Group(prefix string) Router {
+	return &router{
 		ctx:    r.ctx,
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
 	}
-	// combine parent hooks and given hooks
-	for i := 0; i < 2; i++ {
-		if i < len(hooks) && hooks[i] != nil { // having hook setting
-			gr.hooks[i] = append(r.hooks[i], hooks[i]...)
-		} else { // no hook setting, carry the parent's hook
-			gr.hooks[i] = make([]Handler, len(r.hooks[i]))
-			copy(gr.hooks[i], r.hooks[i])
-		}
-	}
-	return gr
 }
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
@@ -347,22 +338,47 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 type notFoundHandler struct{}
 
 func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	content, _ := json.Marshal(map[string]string{"code": "404", "msg": "page not found"})
+	content, _ := json.Marshal(map[string]string{"code": "404", "error": "page not found"})
 	w.WriteHeader(404)
 	w.Write(content)
 }
 
 /************* Error **************/
 
-// Error is the server error type
-type Error struct {
-	Code int    `json:"code"` // the error code, http code encouraged
-	Msg  string `json:"msg"`  // the error message
+// DataBody is a common response format
+type DataBody struct {
+	Code  int         `json:"code"`            // the error code, http code encouraged
+	Error string      `json:"error,emitempty"` // the error message
+	Data  interface{} `json:"data"`
 }
 
-// NewError create a new error
-func NewError(code int, format string, v ...interface{}) error {
-	return &Error{Code: code, Msg: fmt.Sprintf(format, v...)}
+// Data return the data body with given data
+func Data(data interface{}) DataBody {
+	return DataBody{
+		Code: 0,
+		Data: data,
+	}
 }
 
-func (err *Error) Error() string { return err.Msg }
+// Error return DataBody with given error message
+func Error(err interface{}) DataBody {
+	return ErrorWithCode(1, err)
+}
+
+// ErrorWithCode return DataBody with given error message
+func ErrorWithCode(code int, err interface{}) DataBody {
+	d := DataBody{
+		Code: code,
+	}
+	switch e := err.(type) {
+	case error:
+		d.Error = e.Error()
+	case string:
+		d.Error = e
+	case []byte:
+		d.Error = string(e)
+	default:
+		d.Error = fmt.Sprintf("%v", e)
+	}
+	return d
+}

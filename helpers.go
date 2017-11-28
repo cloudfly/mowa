@@ -4,14 +4,11 @@ import (
 	"io/ioutil"
 	"reflect"
 	"strconv"
-
-	"github.com/julienschmidt/httprouter"
 )
 
 // String get a string argument from request by `name`, if not found, return `str`
 func (c *Context) String(name, str string) string {
-	params := c.Value("params").(httprouter.Params)
-	if v := params.ByName(name); v != "" {
+	if v := c.params.ByName(name); v != "" {
 		return v
 	}
 	return str
@@ -19,8 +16,7 @@ func (c *Context) String(name, str string) string {
 
 // Int get a integer argument from request by `name`, if not found, return `i`
 func (c *Context) Int(name string, i int) int {
-	params := c.Value("params").(httprouter.Params)
-	if v := params.ByName(name); v != "" {
+	if v := c.params.ByName(name); v != "" {
 		if j, err := strconv.Atoi(v); err == nil {
 			return j
 		}
@@ -31,8 +27,7 @@ func (c *Context) Int(name string, i int) int {
 
 // Int64 get a integer argument from request by `name`, if not found, return `i`
 func (c *Context) Int64(name string, i int64) int64 {
-	params := c.Value("params").(httprouter.Params)
-	if v := params.ByName(name); v != "" {
+	if v := c.params.ByName(name); v != "" {
 		if j, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return j
 		}
