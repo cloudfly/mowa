@@ -348,7 +348,7 @@ func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // DataBody is a common response format
 type DataBody struct {
 	Code  int         `json:"code"`            // the error code, http code encouraged
-	Error string      `json:"error,emitempty"` // the error message
+	Error string      `json:"error,omitempty"` // the error message
 	Data  interface{} `json:"data"`
 }
 
