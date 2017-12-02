@@ -365,6 +365,16 @@ func Error(err interface{}) DataBody {
 	return ErrorWithCode(1, err)
 }
 
+// Errorf generate error data body with given message
+func Errorf(format string, params ...interface{}) DataBody {
+	return ErrorWithCode(1, fmt.Errorf(format, params...))
+}
+
+// ErrorfWithCode generate error data body with given message
+func ErrorfWithCode(code int, format string, params ...interface{}) DataBody {
+	return ErrorWithCode(code, fmt.Errorf(format, params...))
+}
+
 // ErrorWithCode return DataBody with given error message
 func ErrorWithCode(code int, err interface{}) DataBody {
 	d := DataBody{
