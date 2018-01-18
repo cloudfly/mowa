@@ -316,6 +316,7 @@ func (r *router) Group(prefix string) Router {
 		ctx:    r.ctx,
 		basic:  r.basic,
 		prefix: path.Join(r.prefix, prefix),
+		hooks:  r.hooks,
 	}
 }
 
