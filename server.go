@@ -122,16 +122,18 @@ type Context struct {
 
 // Handler is the server handler type
 type Handler struct {
-	t  rune
-	h0 func(c *Context)
-	h1 func(c *Context) interface{}
-	h2 func(c *Context) (int, interface{})
-	h3 func(c *Context) (int, interface{}, bool)
+	t   rune
+	raw func(http.ResponseWriter, *http.Request)
+	h0  func(*Context)
+	h1  func(*Context) interface{}
+	h2  func(*Context) (int, interface{})
+	h3  func(*Context) (int, interface{}, bool)
 }
 
 // handler types
 const (
-	ht0 = iota
+	raw = iota // raw http.Handler
+	ht0
 	ht1
 	ht2
 	ht3
@@ -139,15 +141,17 @@ const (
 
 // NewHandler create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
-	switch f.(type) {
+	switch handler := f.(type) {
+	case http.Handler:
+		return Handler{t: raw, raw: handler.ServeHTTP}, nil
 	case func(c *Context):
-		return Handler{t: ht0, h0: f.(func(c *Context))}, nil
+		return Handler{t: ht0, h0: handler}, nil
 	case func(c *Context) interface{}:
-		return Handler{t: ht1, h1: f.(func(c *Context) interface{})}, nil
+		return Handler{t: ht1, h1: handler}, nil
 	case func(c *Context) (int, interface{}):
-		return Handler{t: ht2, h2: f.(func(c *Context) (int, interface{}))}, nil
+		return Handler{t: ht2, h2: handler}, nil
 	case func(c *Context) (int, interface{}, bool):
-		return Handler{t: ht3, h3: f.(func(c *Context) (int, interface{}, bool))}, nil
+		return Handler{t: ht3, h3: handler}, nil
 	}
 	return Handler{}, errors.New("unvalid function type for handler")
 }
@@ -193,6 +197,8 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 	HANDLER:
 		for _, handler := range handlers {
 			switch handler.t {
+			case raw:
+				handler.raw(rw, req)
 			case ht0:
 				handler.h0(c)
 			case ht1:
