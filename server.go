@@ -160,7 +160,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 				Request: req,
 				Writer:  rw,
 				Code:    500,
-				Data:    "",
+				Data:    nil,
 				params:  ps,
 			}
 			b bool
