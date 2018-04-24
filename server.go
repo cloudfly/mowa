@@ -63,12 +63,40 @@ func (api *Mowa) Run(addr string) error {
 	return api.server.Serve(api.listener)
 }
 
+// RunTLS the server, and listen to given addr
+func (api *Mowa) RunTLS(addr, certFile, keyFile string) error {
+	api.Lock() // lock the api in case of calling Shutdown() before Serve()
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		api.Unlock()
+		return err
+	}
+
+	listener, err := net.ListenTCP("tcp4", tcpAddr)
+	if err != nil {
+		api.Unlock()
+		return err
+	}
+	api.listener = listener
+	api.Unlock()
+
+	return api.server.ServeTLS(api.listener, certFile, keyFile)
+}
+
 // RunWithListener serve the http service using the given listener
 func (api *Mowa) RunWithListener(listener net.Listener) error {
 	api.Lock()
 	api.listener = listener
 	api.Unlock()
 	return api.server.Serve(api.listener)
+}
+
+// RunWithListenerTLS serve the http service using the given listener
+func (api *Mowa) RunWithListenerTLS(listener net.Listener, certFile, keyFile string) error {
+	api.Lock()
+	api.listener = listener
+	api.Unlock()
+	return api.server.ServeTLS(api.listener, certFile, keyFile)
 }
 
 // Shutdown the server gracefully
