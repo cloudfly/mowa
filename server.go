@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/http2"
 )
 
 /************ API Server **************/
@@ -43,8 +44,7 @@ func New(ctx context.Context) *Mowa {
 	return s
 }
 
-// Run the server, and listen to given addr
-func (api *Mowa) Run(addr string) error {
+func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
 	api.Lock() // lock the api in case of calling Shutdown() before Serve()
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -60,43 +60,57 @@ func (api *Mowa) Run(addr string) error {
 	api.listener = listener
 	api.Unlock()
 
-	return api.server.Serve(api.listener)
+	if h2 {
+		println("configure http2")
+		if err := http2.ConfigureServer(api.server, nil); err != nil {
+			return err
+		}
+	}
+
+	if certFile != "" && keyFile != "" {
+		return api.server.ServeTLS(api.listener, certFile, keyFile)
+	} else {
+		return api.server.Serve(api.listener)
+	}
 }
 
-// RunTLS the server, and listen to given addr
-func (api *Mowa) RunTLS(addr, certFile, keyFile string) error {
-	api.Lock() // lock the api in case of calling Shutdown() before Serve()
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		api.Unlock()
-		return err
-	}
+// Run the server, and listen to given addr
+func (api *Mowa) Run(addr string) error {
+	return api.run(addr, "", "", false)
+}
 
-	listener, err := net.ListenTCP("tcp4", tcpAddr)
-	if err != nil {
-		api.Unlock()
-		return err
-	}
+// Run TLS server, and listen to given addr
+func (api *Mowa) RunTLS(addr, certFile, keyFile string) error {
+	return api.run(addr, certFile, keyFile, false)
+}
+
+// RunWithListener serve the http service using the given listener
+func (api *Mowa) runWithListener(listener net.Listener, certFile, keyFile string, h2 bool) error {
+	api.Lock()
 	api.listener = listener
 	api.Unlock()
 
-	return api.server.ServeTLS(api.listener, certFile, keyFile)
+	if h2 {
+		if err := http2.ConfigureServer(api.server, nil); err != nil {
+			return err
+		}
+	}
+
+	if certFile != "" && keyFile != "" {
+		return api.server.ServeTLS(api.listener, certFile, keyFile)
+	} else {
+		return api.server.Serve(api.listener)
+	}
 }
 
 // RunWithListener serve the http service using the given listener
 func (api *Mowa) RunWithListener(listener net.Listener) error {
-	api.Lock()
-	api.listener = listener
-	api.Unlock()
-	return api.server.Serve(api.listener)
+	return api.runWithListener(listener, "", "", false)
 }
 
-// RunWithListenerTLS serve the http service using the given listener
-func (api *Mowa) RunWithListenerTLS(listener net.Listener, certFile, keyFile string) error {
-	api.Lock()
-	api.listener = listener
-	api.Unlock()
-	return api.server.ServeTLS(api.listener, certFile, keyFile)
+// RunTLSWithListener serve the https service using the given listener
+func (api *Mowa) RunTLSWithListener(listener net.Listener, certFile, keyFile string) error {
+	return api.runWithListener(listener, certFile, keyFile, false)
 }
 
 // Shutdown the server gracefully
