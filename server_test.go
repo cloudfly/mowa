@@ -2,10 +2,13 @@ package mowa
 
 import (
 	"context"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var testC *Context
@@ -17,59 +20,107 @@ func init() {
 	}
 }
 
-func handle1(c *Context) (int, interface{}) {
-	return 200, "handle1: hello world"
-}
-
-func handle2(c *Context) (int, interface{}) {
-	return 203, map[string]interface{}{
-		"one": 1,
-		"two": "two",
-	}
-}
-
-func handle3(c *Context) (int, interface{}) {
-
-	return 202, map[string]interface{}{
-		"one": 1,
-		"age": c.Int("age", 20),
-	}
-}
-
 func TestServer(t *testing.T) {
 	api := New(context.Background())
 	go api.Run(":10000")
 	api.Get("/test", func(c *Context) (int, interface{}) {
 		return 200, "test"
 	})
+	defer api.Shutdown(time.Second)
 	resp, err := http.Get("http://localhost:10000/test")
 	if err != nil {
 		t.Error(err)
 	}
-	content, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(string(content))
 
+	assert.Equal(t, 200, resp.StatusCode)
+	content, _ := ioutil.ReadAll(resp.Body)
+	assert.Equal(t, `"test"`, string(content))
 }
 
 func TestServeHTTP(t *testing.T) {
-	router := newRouter(context.Background())
-	router.Group("/api/v1").Get("/chen", handle1)
-	router.Get("/yun", handle2)
-	router.Get("/fei/:age", handle3)
-
-	for _, uri := range []string{"/chen", "/api/v1/chen", "/yun", "/fei/aa", "/fei/25"} {
-		req, err := http.NewRequest("GET", "http://localhost"+uri, nil)
-		if err != nil {
-			t.Error(err)
-		}
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-		t.Log("\n\nRequest for " + uri)
-		t.Log(w.Code)
-		t.Log(w.Body.String())
+	handler := func(c *Context) (int, interface{}) {
+		return 200, c.Query("return", "")
 	}
+
+	router := newRouter(context.Background())
+	router.Group("/api/v1").Get("/chen", handler)
+	router.Get("/yun", handler)
+	router.Get("/fei/:age", handler)
+
+	req, err := http.NewRequest("GET", "http://localhost/chen", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 404, w.Code)
+
+	req, err = http.NewRequest("GET", "http://localhost/api/v1/chen?return=hello", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, `"hello"`, w.Body.String())
+
+	req, err = http.NewRequest("GET", "http://localhost/yun?return=yun", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, `"yun"`, w.Body.String())
+
+	req, err = http.NewRequest("GET", "http://localhost/fei/23?return=23", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, `"23"`, w.Body.String())
+}
+
+type User struct{}
+
+func (u User) Get(ctx *Context) interface{} {
+	return ctx.String("name", "")
+}
+
+func (u User) Delete(ctx *Context) interface{} {
+	return "deleted"
+}
+
+func TestRouter_AddResource(t *testing.T) {
+
+	router := newRouter(context.Background())
+	router.AddResource("/user/:name", User{})
+
+	req, err := http.NewRequest("GET", "http://localhost/users", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 404, w.Code)
+
+	req, err = http.NewRequest("GET", "http://localhost/user/chen", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, `"chen"`, w.Body.String())
+
+	req, err = http.NewRequest("DELETE", "http://localhost/user/chen", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, `"deleted"`, w.Body.String())
 
 }

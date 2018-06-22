@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"path"
+	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,13 +20,20 @@ import (
 	"golang.org/x/net/http2"
 )
 
+var (
+	notFoundResponse []byte
+)
+
+func init() {
+	notFoundResponse, _ = json.Marshal(DataBody{Code: 404, Error: "page not found"})
+}
+
 /************ API Server **************/
 
 // Mowa represent a http server
 type Mowa struct {
+	Router // the router of server
 	sync.Mutex
-	Router          // the router of server
-	Addr     string // the address to listen on
 	server   *http.Server
 	ctx      context.Context
 	listener net.Listener
@@ -143,6 +152,7 @@ type Router interface {
 	Delete(uri string, handler ...interface{}) Router
 	Head(uri string, handler ...interface{}) Router
 	Options(uri string, handler ...interface{}) Router
+	AddResource(uri string, resource interface{}) Router
 	NotFound(handler http.Handler) Router
 }
 
@@ -162,7 +172,7 @@ type Context struct {
 
 /****************** Handler *********************/
 
-// Handler is the server handler type
+// Handler is the server handler type, switch interface{}.(type) is too slow
 type Handler struct {
 	t   rune
 	raw func(http.ResponseWriter, *http.Request)
@@ -286,7 +296,7 @@ func newRouter(ctx context.Context) *router {
 		prefix: "/",
 		hooks:  [2][]Handler{nil, nil},
 	}
-	r.basic.NotFound = new(notFoundHandler)
+	r.basic.NotFound = notFoundHandler{}
 	return r
 }
 
@@ -384,12 +394,23 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 	return r
 }
 
+func (r *router) AddResource(uri string, resource interface{}) Router {
+	value := reflect.ValueOf(resource)
+	for _, name := range [...]string{"Get", "Post", "Put", "Patch", "Delete", "Head", "Options"} {
+		method := value.MethodByName(name)
+		if !method.IsValid() {
+			continue
+		}
+		r.Method(strings.ToUpper(name), uri, method.Interface())
+	}
+	return r
+}
+
 type notFoundHandler struct{}
 
-func (h *notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	content, _ := json.Marshal(map[string]string{"code": "404", "error": "page not found"})
+func (h notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(404)
-	w.Write(content)
+	w.Write(notFoundResponse)
 }
 
 /************* Error **************/
