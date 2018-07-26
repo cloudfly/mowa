@@ -263,6 +263,10 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 					break HANDLER
 				}
 			}
+			if c.Code == 301 || c.Code == 302 || c.Code == 307 || c.Code == 308 {
+				http.Redirect(c.Writer, c.Request, fmt.Sprintf("%v", c.Data), c.Code)
+				return
+			}
 		}
 
 		if c.Data != nil {
