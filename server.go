@@ -259,7 +259,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 				c.Code, c.Data = handler.h2(c)
 			case ht3:
 				c.Code, c.Data, b = handler.h3(c)
-				if b {
+				if !b {
 					break HANDLER
 				}
 			}
