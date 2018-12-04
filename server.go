@@ -78,9 +78,8 @@ func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
 
 	if certFile != "" && keyFile != "" {
 		return api.server.ServeTLS(api.listener, certFile, keyFile)
-	} else {
-		return api.server.Serve(api.listener)
 	}
+	return api.server.Serve(api.listener)
 }
 
 // Run the server, and listen to given addr
@@ -88,7 +87,7 @@ func (api *Mowa) Run(addr string) error {
 	return api.run(addr, "", "", false)
 }
 
-// Run TLS server, and listen to given addr
+// RunTLS run tls server, and listen to given addr
 func (api *Mowa) RunTLS(addr, certFile, keyFile string) error {
 	return api.run(addr, certFile, keyFile, false)
 }
@@ -107,9 +106,8 @@ func (api *Mowa) runWithListener(listener net.Listener, certFile, keyFile string
 
 	if certFile != "" && keyFile != "" {
 		return api.server.ServeTLS(api.listener, certFile, keyFile)
-	} else {
-		return api.server.Serve(api.listener)
 	}
+	return api.server.Serve(api.listener)
 }
 
 // RunWithListener serve the http service using the given listener
@@ -239,7 +237,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 
 				buf := make([]byte, 1024*64)
 				runtime.Stack(buf, false)
-				log.Printf("%s\n", buf)
+				log.Printf("%v\n%s\n", r, buf)
 			}
 		}()
 
