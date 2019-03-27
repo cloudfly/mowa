@@ -70,7 +70,6 @@ func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
 	api.Unlock()
 
 	if h2 {
-		println("configure http2")
 		if err := http2.ConfigureServer(api.server, nil); err != nil {
 			return err
 		}
@@ -237,7 +236,7 @@ func httpRouterHandle(ctx context.Context, handlers []Handler) httprouter.Handle
 
 				buf := make([]byte, 1024*64)
 				runtime.Stack(buf, false)
-				log.Printf("%v\n%s\n", r, buf)
+				log.Printf("%s\n%s\n", errs, buf)
 			}
 		}()
 
