@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"fmt"
 	"log"
 	"net"
@@ -22,10 +23,12 @@ import (
 
 var (
 	notFoundResponse []byte
+	varHandler       http.Handler
 )
 
 func init() {
 	notFoundResponse, _ = json.Marshal(DataBody{Code: 404, Error: "page not found"})
+	varHandler = expvar.Handler()
 }
 
 /************ API Server **************/
@@ -319,6 +322,8 @@ func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		pprof.Handler("block").ServeHTTP(rw, req)
 	case "/debug/pprof/threadcreate":
 		pprof.Handler("threadcreate").ServeHTTP(rw, req)
+	case "/debug/vars":
+		varHandler.ServeHTTP(rw, req)
 	default:
 		r.basic.ServeHTTP(rw, req)
 	}
