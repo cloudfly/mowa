@@ -17,13 +17,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudfly/golang/cluster"
+	"github.com/cloudfly/golang/dconf"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/http2"
 )
 
+type ctxKey string
+
 var (
-	notFoundResponse []byte
-	varHandler       http.Handler
+	notFoundResponse  []byte
+	varHandler        http.Handler
+	clusterContextKey ctxKey = "cluster"
+	dconfContextKey   ctxKey = "dconf"
 )
 
 func init() {
@@ -54,6 +60,31 @@ func New(ctx context.Context) *Mowa {
 	}
 	s.server.Handler = s
 	return s
+}
+
+// WithCluster add http api for cluster management
+func (api *Mowa) WithCluster(clt *cluster.Cluster) {
+	if clt == nil {
+		return
+	}
+	api.ctx = context.WithValue(api.ctx, clusterContextKey, clt)
+	api.Get("/debug/cluster/nodes", ClusterNodes)
+	api.Post("/debug/cluster/nodes", ClusterAddNode)
+	api.Put("/debug/cluster/nodes", ClusterUpdateNode)
+	api.Delete("/debug/cluster/nodes/:name", ClusterRemoveNode)
+}
+
+// WithDConf add http api for dconf
+func (api *Mowa) WithDConf(conf *dconf.DConf) {
+	if conf == nil {
+		return
+	}
+	api.ctx = context.WithValue(api.ctx, dconfContextKey, conf)
+	api.Get("/debug/config/:key", ConfigRead)
+	api.Post("/debug/config/:key", ConfigWrite)
+	api.Delete("/debug/config/:key", ConfigDelete)
+	api.Get("/debug/config_keys/:prefix", ConfigKeys)
+	api.Get("/debug/config_data/:prefix", ConfigData)
 }
 
 func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
