@@ -2,9 +2,5 @@ language: go
 go:
   - 1.12
 
-install:
-  - go get github.com/julienschmidt/httprouter
-  - go get golang.org/x/net/context
-
 script:
   - go test -v
