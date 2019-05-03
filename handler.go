@@ -65,11 +65,13 @@ func (handler Handler) handle(ctx *Context) bool {
 	case ht0:
 		handler.h0(ctx)
 	case ht1:
-		ctx.Code, ctx.Data = 200, handler.h1(ctx)
+		ctx.Data = handler.h1(ctx)
 	case ht2:
 		ctx.Code, ctx.Data = handler.h2(ctx)
 	case ht3:
 		ctx.Code, ctx.Data, continuous = handler.h3(ctx)
+	case ht4:
+		ctx.Data, continuous = handler.h4(ctx)
 	}
 	return continuous
 }

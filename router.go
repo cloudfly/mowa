@@ -182,7 +182,7 @@ func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 			Context: r.ctx,
 			Request: req,
 			Writer:  rw,
-			Code:    500,
+			Code:    200,
 			Data:    nil,
 			params:  ps,
 		}
