@@ -24,6 +24,7 @@ const (
 	ht1
 	ht2
 	ht3
+	ht4
 )
 
 // Handler is the server handler type, switch interface{}.(type) is too slow
@@ -34,6 +35,7 @@ type Handler struct {
 	h1  func(*Context) interface{}
 	h2  func(*Context) (int, interface{})
 	h3  func(*Context) (int, interface{}, bool)
+	h4  func(*Context) (interface{}, bool)
 }
 
 // NewHandler create a new handler, the given argument must be a function
@@ -49,6 +51,8 @@ func NewHandler(f interface{}) (Handler, error) {
 		return Handler{t: ht2, h2: handler}, nil
 	case func(c *Context) (int, interface{}, bool):
 		return Handler{t: ht3, h3: handler}, nil
+	case func(c *Context) (interface{}, bool):
+		return Handler{t: ht4, h4: handler}, nil
 	}
 	return Handler{}, errors.New("unvalid function type for handler")
 }
