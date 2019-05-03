@@ -2,107 +2,88 @@ package mowa
 
 import (
 	"encoding/json"
-
-	"github.com/cloudfly/golang/cluster"
-	"github.com/cloudfly/golang/dconf"
+	"errors"
+	"expvar"
+	"net/http"
 )
 
-// ClusterNodes 返回 cluster 节点列表
-func ClusterNodes(ctx *Context) interface{} {
-	clt, ok := ctx.Value(clusterContextKey).(*cluster.Cluster)
-	if !ok {
-		return ErrorWithCode(404, "not found")
-	}
-	return Data(clt.Nodes())
+var (
+	notFoundResponse []byte
+	varHandler       http.Handler
+)
+
+func init() {
+	notFoundResponse, _ = json.Marshal(DataBody{Code: 404, Error: "page not found"})
+	varHandler = expvar.Handler()
 }
 
-// ClusterAddNode 向集群增加节点
-func ClusterAddNode(ctx *Context) interface{} {
-	clt := ctx.Value(clusterContextKey).(*cluster.Cluster)
-	var node cluster.Node
-	if err := json.Unmarshal(ctx.ReadBody(), &node); err != nil {
-		return ErrorWithCode(400, err)
-	}
-	if err := clt.AddNode(node); err != nil {
-		return ErrorWithCode(400, err)
-	}
-	return Data("CREATED")
+// handler types
+const (
+	raw = iota // raw http.Handler
+	ht0
+	ht1
+	ht2
+	ht3
+)
+
+// Handler is the server handler type, switch interface{}.(type) is too slow
+type Handler struct {
+	t   rune
+	raw func(http.ResponseWriter, *http.Request)
+	h0  func(*Context)
+	h1  func(*Context) interface{}
+	h2  func(*Context) (int, interface{})
+	h3  func(*Context) (int, interface{}, bool)
 }
 
-// ClusterUpdateNode 更新集群节点
-func ClusterUpdateNode(ctx *Context) interface{} {
-	clt := ctx.Value(clusterContextKey).(*cluster.Cluster)
-	var node cluster.Node
-	if err := json.Unmarshal(ctx.ReadBody(), &node); err != nil {
-		return ErrorWithCode(400, err)
+// NewHandler create a new handler, the given argument must be a function
+func NewHandler(f interface{}) (Handler, error) {
+	switch handler := f.(type) {
+	case http.Handler:
+		return Handler{t: raw, raw: handler.ServeHTTP}, nil
+	case func(c *Context):
+		return Handler{t: ht0, h0: handler}, nil
+	case func(c *Context) interface{}:
+		return Handler{t: ht1, h1: handler}, nil
+	case func(c *Context) (int, interface{}):
+		return Handler{t: ht2, h2: handler}, nil
+	case func(c *Context) (int, interface{}, bool):
+		return Handler{t: ht3, h3: handler}, nil
 	}
-	if err := clt.UpdateNode(node); err != nil {
-		return ErrorWithCode(400, err)
-	}
-	return Data("UPDATED")
+	return Handler{}, errors.New("unvalid function type for handler")
 }
 
-// ClusterRemoveNode 删除集群节点
-func ClusterRemoveNode(ctx *Context) interface{} {
-	clt := ctx.Value(clusterContextKey).(*cluster.Cluster)
-	name := ctx.String("name", "")
-	if name == "" {
-		return ErrorWithCode(400, "node name required")
+func (handler Handler) handle(ctx *Context) bool {
+	continuous := true
+	switch handler.t {
+	case raw:
+		handler.raw(ctx.Writer, ctx.Request)
+	case ht0:
+		handler.h0(ctx)
+	case ht1:
+		ctx.Code, ctx.Data = 200, handler.h1(ctx)
+	case ht2:
+		ctx.Code, ctx.Data = handler.h2(ctx)
+	case ht3:
+		ctx.Code, ctx.Data, continuous = handler.h3(ctx)
 	}
-	if err := clt.RemoveNode(name); err != nil {
-		return ErrorWithCode(400, err)
-	}
-	return Data("DELETED")
+	return continuous
 }
 
-// ConfigRead read a value from dconf
-func ConfigRead(ctx *Context) interface{} {
-	conf := ctx.Value(dconfContextKey).(dconf.DConf)
-	key := ctx.String("key", "")
-	if key == "" {
-		return ErrorWithCode(400, "key required")
+type Handlers []Handler
+
+func (handlers Handlers) handle(ctx *Context) (continuous bool) {
+	for _, handler := range handlers {
+		if continuous := handler.handle(ctx); !continuous {
+			return false
+		}
 	}
-	v, err := conf.Get(key)
-	if err != nil {
-		return ErrorWithCode(404, err)
-	}
-	return Data(v)
+	return true
 }
 
-// ConfigWrite write a key-value into dconf
-func ConfigWrite(ctx *Context) interface{} {
-	conf := ctx.Value(dconfContextKey).(dconf.DConf)
-	key := ctx.String("key", "")
-	if key == "" {
-		return ErrorWithCode(400, "key required")
-	}
-	if err := conf.Set(key, string(ctx.ReadBody()), ctx.Query("pre_exist", "false") == "true"); err != nil {
-		return ErrorWithCode(404, err)
-	}
-	return Data("OK")
-}
+type notFoundHandler struct{}
 
-// ConfigDelete del a key-value from dconf
-func ConfigDelete(ctx *Context) interface{} {
-	conf := ctx.Value(dconfContextKey).(dconf.DConf)
-	key := ctx.String("key", "")
-	if key == "" {
-		return ErrorWithCode(400, "key required")
-	}
-	if err := conf.Del(key); err != nil {
-		return ErrorWithCode(500, err)
-	}
-	return Data("OK")
-}
-
-// ConfigKeys get keys list by prefix
-func ConfigKeys(ctx *Context) interface{} {
-	conf := ctx.Value(dconfContextKey).(dconf.DConf)
-	return Data(conf.Keys(ctx.String("prefix", "")))
-}
-
-// ConfigData get key-values by prefix
-func ConfigData(ctx *Context) interface{} {
-	conf := ctx.Value(dconfContextKey).(dconf.DConf)
-	return Data(conf.Data(ctx.String("prefix", "")))
+func (h notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(404)
+	w.Write(notFoundResponse)
 }

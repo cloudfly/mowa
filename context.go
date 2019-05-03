@@ -1,10 +1,28 @@
 package mowa
 
 import (
+	"context"
 	"io/ioutil"
+	"net/http"
 	"reflect"
 	"strconv"
+
+	"github.com/julienschmidt/httprouter"
 )
+
+// Context in every request
+type Context struct {
+	context.Context
+	// the raw http request
+	Request *http.Request
+	// the http response writer
+	Writer http.ResponseWriter
+	// the http code to response
+	Code int
+	// the data to response, the data will be format to json and written into response body
+	Data   interface{}
+	params httprouter.Params
+}
 
 // String get a string argument from request by `name`, if not found, return `str`
 func (c *Context) String(name, str string) string {
