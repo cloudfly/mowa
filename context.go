@@ -62,6 +62,26 @@ func (c *Context) Query(name, str string) string {
 	return str
 }
 
+// QueryInt get a int64 argument from url-query by `name`, if not found or not a integer, return `str`
+func (c *Context) QueryInt(name string, i int64) int64 {
+	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
+		if i64, err := strconv.ParseInt(ret, 10, 64); err == nil {
+			return i64
+		}
+	}
+	return i
+}
+
+// QueryFloat get a float64 argument from url-query by `name`, if not found or not a integer, return `str`
+func (c *Context) QueryFloat(name string, f float64) float64 {
+	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
+		if f64, err := strconv.ParseFloat(ret, 64); err == nil {
+			return f64
+		}
+	}
+	return f
+}
+
 // QuerySlice get a slice argument from url-query by `name`, if not found, return `slice`
 func (c *Context) QuerySlice(name string, slice []string) []string {
 	if ret, ok := c.Request.URL.Query()[name]; ok {
@@ -104,5 +124,4 @@ func (c *Context) IsEmpty(v interface{}) bool {
 	default:
 		return false
 	}
-
 }
