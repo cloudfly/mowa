@@ -63,7 +63,17 @@ func (c *Context) Query(name, str string) string {
 }
 
 // QueryInt get a int64 argument from url-query by `name`, if not found or not a integer, return `str`
-func (c *Context) QueryInt(name string, i int64) int64 {
+func (c *Context) QueryInt(name string, i int) int {
+	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
+		if v, err := strconv.Atoi(ret); err == nil {
+			return v
+		}
+	}
+	return i
+}
+
+// QueryInt64 get a int64 argument from url-query by `name`, if not found or not a integer, return `str`
+func (c *Context) QueryInt64(name string, i int64) int64 {
 	if ret := c.Request.URL.Query().Get(name); len(ret) > 0 {
 		if i64, err := strconv.ParseInt(ret, 10, 64); err == nil {
 			return i64
