@@ -135,6 +135,12 @@ func (r *router) Head(uri string, handler ...interface{}) Router {
 func (r *router) Options(uri string, handler ...interface{}) Router {
 	return r.Method("OPTIONS", uri, handler...)
 }
+func (r *router) Any(uri string, handler ...interface{}) Router {
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} {
+		r.Method(method, uri, handler...)
+	}
+	return r
+}
 func (r *router) NotFound(handler http.Handler) Router { r.basic.NotFound = handler; return r }
 
 // Group create a router group with the uri prefix
