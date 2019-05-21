@@ -34,6 +34,8 @@ type Router interface {
 	Head(uri string, handler ...interface{}) Router
 	Options(uri string, handler ...interface{}) Router
 	AddResource(uri string, resource interface{}) Router
+	Any(uri string, handler ...interface{}) Router
+	Method(method, uri string, handler ...interface{}) Router
 	NotFound(handler http.Handler) Router
 }
 
