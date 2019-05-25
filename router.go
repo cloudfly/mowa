@@ -174,12 +174,22 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 
 func (r *router) AddResource(uri string, resource interface{}) Router {
 	value := reflect.ValueOf(resource)
+	beforeMethod := value.MethodByName("BeforeRequest")
+	afterMethod := value.MethodByName("AfterRequest")
 	for _, name := range [...]string{"Get", "Post", "Put", "Patch", "Delete", "Head", "Options"} {
 		method := value.MethodByName(name)
 		if !method.IsValid() {
 			continue
 		}
-		r.Method(strings.ToUpper(name), uri, method.Interface())
+		handlers := make([]interface{}, 0, 3)
+		if beforeMethod.IsValid() {
+			handlers = append(handlers, beforeMethod.Interface())
+		}
+		handlers = append(handlers, method.Interface())
+		if afterMethod.IsValid() {
+			handlers = append(handlers, afterMethod.Interface())
+		}
+		r.Method(strings.ToUpper(name), uri, handlers...)
 	}
 	return r
 }

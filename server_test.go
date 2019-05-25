@@ -84,6 +84,13 @@ func TestServeHTTP(t *testing.T) {
 
 type User struct{}
 
+func (u User) BeforeRequest(ctx *Context) (interface{}, bool) {
+	if ctx.String("name", "") == "before" {
+		return "BeforeRequest", false
+	}
+	return nil, true
+}
+
 func (u User) Get(ctx *Context) interface{} {
 	return ctx.String("name", "")
 }
@@ -123,4 +130,12 @@ func TestRouter_AddResource(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 	assert.Equal(t, `"deleted"`, w.Body.String())
 
+	req, err = http.NewRequest("DELETE", "http://localhost/user/before", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, `"BeforeRequest"`, w.Body.String())
 }
