@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"golang.org/x/net/http2"
 )
 
 // Mowa represent a http server
@@ -33,7 +31,7 @@ func New(ctx context.Context) *Mowa {
 	return s
 }
 
-func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
+func (api *Mowa) Run(addr string) error {
 	api.Lock() // lock the api in case of calling Shutdown() before Serve()
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -49,54 +47,15 @@ func (api *Mowa) run(addr string, certFile, keyFile string, h2 bool) error {
 	api.listener = listener
 	api.Unlock()
 
-	if h2 {
-		if err := http2.ConfigureServer(api.server, nil); err != nil {
-			return err
-		}
-	}
-
-	if certFile != "" && keyFile != "" {
-		return api.server.ServeTLS(api.listener, certFile, keyFile)
-	}
-	return api.server.Serve(api.listener)
-}
-
-// Run the server, and listen to given addr
-func (api *Mowa) Run(addr string) error {
-	return api.run(addr, "", "", false)
-}
-
-// RunTLS run tls server, and listen to given addr
-func (api *Mowa) RunTLS(addr, certFile, keyFile string) error {
-	return api.run(addr, certFile, keyFile, false)
-}
-
-// RunWithListener serve the http service using the given listener
-func (api *Mowa) runWithListener(listener net.Listener, certFile, keyFile string, h2 bool) error {
-	api.Lock()
-	api.listener = listener
-	api.Unlock()
-
-	if h2 {
-		if err := http2.ConfigureServer(api.server, nil); err != nil {
-			return err
-		}
-	}
-
-	if certFile != "" && keyFile != "" {
-		return api.server.ServeTLS(api.listener, certFile, keyFile)
-	}
 	return api.server.Serve(api.listener)
 }
 
 // RunWithListener serve the http service using the given listener
 func (api *Mowa) RunWithListener(listener net.Listener) error {
-	return api.runWithListener(listener, "", "", false)
-}
-
-// RunTLSWithListener serve the https service using the given listener
-func (api *Mowa) RunTLSWithListener(listener net.Listener, certFile, keyFile string) error {
-	return api.runWithListener(listener, certFile, keyFile, false)
+	api.Lock()
+	api.listener = listener
+	api.Unlock()
+	return api.server.Serve(api.listener)
 }
 
 // Shutdown the server gracefully
