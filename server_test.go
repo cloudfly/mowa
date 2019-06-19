@@ -34,7 +34,7 @@ func TestServer(t *testing.T) {
 
 	assert.Equal(t, 200, resp.StatusCode)
 	content, _ := ioutil.ReadAll(resp.Body)
-	assert.Equal(t, `"test"`, string(content))
+	assert.Equal(t, `test`, string(content))
 }
 
 func TestServeHTTP(t *testing.T) {
@@ -62,7 +62,7 @@ func TestServeHTTP(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `"hello"`, w.Body.String())
+	assert.Equal(t, `hello`, w.Body.String())
 
 	req, err = http.NewRequest("GET", "http://localhost/yun?return=yun", nil)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestServeHTTP(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `"yun"`, w.Body.String())
+	assert.Equal(t, `yun`, w.Body.String())
 
 	req, err = http.NewRequest("GET", "http://localhost/fei/23?return=23", nil)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestServeHTTP(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	assert.Equal(t, `"23"`, w.Body.String())
+	assert.Equal(t, `23`, w.Body.String())
 }
 
 type User struct{}
@@ -119,7 +119,7 @@ func TestRouter_AddResource(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `"chen"`, w.Body.String())
+	assert.Equal(t, `chen`, w.Body.String())
 
 	req, err = http.NewRequest("DELETE", "http://localhost/user/chen", nil)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestRouter_AddResource(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `"deleted"`, w.Body.String())
+	assert.Equal(t, `deleted`, w.Body.String())
 
 	req, err = http.NewRequest("DELETE", "http://localhost/user/before", nil)
 	if err != nil {
@@ -137,5 +137,5 @@ func TestRouter_AddResource(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `"BeforeRequest"`, w.Body.String())
+	assert.Equal(t, `BeforeRequest`, w.Body.String())
 }

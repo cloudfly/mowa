@@ -236,12 +236,25 @@ func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 		}
 
 		if c.Data != nil {
-			content, err := json.Marshal(c.Data)
-			if err != nil {
-				content, _ = json.Marshal(Error("json format error, " + err.Error()))
+			var (
+				content []byte
+				err     error
+			)
+			switch d := c.Data.(type) {
+			case string:
+				content = []byte(d)
+				c.Writer.Header().Set("Content-Type", "application/text; charset=utf-8")
+			case []byte:
+				content = d
+				c.Writer.Header().Set("Content-Type", "application/text; charset=utf-8")
+			default:
+				content, err = json.Marshal(c.Data)
+				if err != nil {
+					content, _ = json.Marshal(Error("json format error, " + err.Error()))
+				}
+				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			}
 
-			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			c.Writer.WriteHeader(c.Code)
 			c.Writer.Write(content)
 		}
