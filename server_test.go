@@ -139,3 +139,28 @@ func TestRouter_AddResource(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 	assert.Equal(t, `BeforeRequest`, w.Body.String())
 }
+
+func TestHook(t *testing.T) {
+	num := 0
+	router := newRouter(context.Background())
+	router.BeforeRequest(func(ctx *Context) {
+		println("before request")
+		num++
+	})
+	router.Get("/test", func(ctx *Context) {
+		println("in request")
+		num++
+	})
+	router.AfterRequest(func(ctx *Context) {
+		println("after request")
+		num++
+	})
+
+	req, err := http.NewRequest("GET", "http://localhost/test", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, 3, num)
+}

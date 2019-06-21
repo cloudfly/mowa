@@ -158,8 +158,7 @@ func (r *router) Group(prefix string) Router {
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
 func (r *router) Method(method, uri string, handler ...interface{}) Router {
-	handlers := make([]Handler, 0, len(r.hooks[0])+len(handler)+len(r.hooks[1]))
-	handlers = append(handlers, r.hooks[0]...) // run before
+	handlers := make([]Handler, 0, len(handler))
 	for _, h := range handler {
 		tmp, err := NewHandler(h)
 		if err != nil {
@@ -167,7 +166,6 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 		}
 		handlers = append(handlers, tmp)
 	}
-	handlers = append(handlers, r.hooks[1]...) // run after
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandler(r, handlers))
 	return r
 }
