@@ -151,6 +151,10 @@ func TestHook(t *testing.T) {
 		println("in request")
 		num++
 	})
+	router.BeforeRequest(func(ctx *Context) {
+		println("before request(2)")
+		num++
+	})
 	router.AfterRequest(func(ctx *Context) {
 		println("after request")
 		num++
@@ -162,5 +166,5 @@ func TestHook(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	assert.Equal(t, 3, num)
+	assert.Equal(t, 4, num)
 }
