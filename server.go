@@ -31,6 +31,7 @@ func New(ctx context.Context) *Mowa {
 	return s
 }
 
+// Run will start the web service and listening the tcp addr
 func (api *Mowa) Run(addr string) error {
 	api.Lock() // lock the api in case of calling Shutdown() before Serve()
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)

@@ -76,6 +76,7 @@ func (handler Handler) handle(ctx *Context) bool {
 	return continuous
 }
 
+// Handlers  reprsents a list of handler, handler in it will be called in sort until one handler return false
 type Handlers []Handler
 
 func (handlers Handlers) handle(ctx *Context) (continuous bool) {
