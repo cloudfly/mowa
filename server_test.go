@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testC *Context
+var (
+	testC *Context
+)
 
 func init() {
 	req, _ := http.NewRequest("Get", "http://localhost:1234/hello/world?name=chen&age=25&name=yun", nil)
@@ -82,64 +84,6 @@ func TestServeHTTP(t *testing.T) {
 	assert.Equal(t, `23`, w.Body.String())
 }
 
-type User struct{}
-
-func (u User) BeforeRequest(ctx *Context) (interface{}, bool) {
-	if ctx.String("name", "") == "before" {
-		return "BeforeRequest", false
-	}
-	return nil, true
-}
-
-func (u User) Get(ctx *Context) interface{} {
-	return ctx.String("name", "")
-}
-
-func (u User) Delete(ctx *Context) interface{} {
-	return "deleted"
-}
-
-func TestRouter_AddResource(t *testing.T) {
-
-	router := newRouter(context.Background())
-	router.AddResource("/user/:name", User{})
-
-	req, err := http.NewRequest("GET", "http://localhost/users", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	assert.Equal(t, 404, w.Code)
-
-	req, err = http.NewRequest("GET", "http://localhost/user/chen", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `chen`, w.Body.String())
-
-	req, err = http.NewRequest("DELETE", "http://localhost/user/chen", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `deleted`, w.Body.String())
-
-	req, err = http.NewRequest("DELETE", "http://localhost/user/before", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Equal(t, `BeforeRequest`, w.Body.String())
-}
-
 func TestHook(t *testing.T) {
 	num := 0
 	router := newRouter(context.Background())
@@ -167,4 +111,50 @@ func TestHook(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 4, num)
+}
+
+func BenchmarkServeHTTPString(b *testing.B) {
+	api := New(context.Background())
+	api.Get("/string", func(c *Context) (int, interface{}) {
+		return 200, "test"
+	})
+	req, err := http.NewRequest("GET", "http://localhost/string", nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	rw := httptest.NewRecorder()
+	for i := 0; i < b.N; i++ {
+		api.ServeHTTP(rw, req)
+	}
+}
+
+func BenchmarkServeHTTPBytes(b *testing.B) {
+	api := New(context.Background())
+	resp := []byte("test")
+	api.Get("/bytes", func(c *Context) (int, interface{}) {
+		return 200, resp
+	})
+	req, err := http.NewRequest("GET", "http://localhost/bytes", nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	rw := httptest.NewRecorder()
+	for i := 0; i < b.N; i++ {
+		api.ServeHTTP(rw, req)
+	}
+}
+
+func BenchmarkServeHTTPJSON(b *testing.B) {
+	api := New(context.Background())
+	api.Get("/json", func(c *Context) (int, interface{}) {
+		return 200, []int{1, 2, 34, 2, 1}
+	})
+	req, err := http.NewRequest("GET", "http://localhost/json", nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	rw := httptest.NewRecorder()
+	for i := 0; i < b.N; i++ {
+		api.ServeHTTP(rw, req)
+	}
 }
