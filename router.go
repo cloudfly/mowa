@@ -2,12 +2,9 @@ package mowa
 
 import (
 	"context"
-	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/pprof"
 	"path"
-	"runtime"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -104,7 +101,10 @@ func (r *router) processHooks(ctx *Context, hookIndex int) (continuous bool) {
 			return false
 		}
 	}
-	return r.hooks[hookIndex].handle(ctx)
+	if len(r.hooks[hookIndex]) > 0 {
+		return r.hooks[hookIndex].handle(ctx)
+	}
+	return true
 }
 
 // Before set the pre hook for router, Before will run before handlers
@@ -165,71 +165,4 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 	}
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandler(r, handlers))
 	return r
-}
-
-func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
-	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		c := &Context{
-			Context: r.ctx,
-			Request: req,
-			Writer:  rw,
-			Code:    200,
-			Data:    nil,
-			params:  ps,
-		}
-
-		// defer to recover in case of some panic, assert in context use this
-		defer func() {
-			if r := recover(); r != nil {
-				errs := ""
-				switch rr := r.(type) {
-				case string:
-					errs = rr
-				case error:
-					errs = rr.Error()
-				}
-				b, _ := json.Marshal(Error(errs))
-				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-				c.Writer.WriteHeader(500)
-				c.Writer.Write(b)
-
-				buf := make([]byte, 1024*64)
-				runtime.Stack(buf, false)
-				log.Printf("%s\n%s\n", errs, buf)
-			}
-		}()
-
-		c.Request.ParseForm()
-		// run handler
-
-		if continuous := r.processHooks(c, headHook); continuous {
-			if continuous = handlers.handle(c); continuous {
-				r.processHooks(c, tailHook)
-			}
-		}
-
-		if c.Data != nil {
-			var (
-				content []byte
-				err     error
-			)
-			switch d := c.Data.(type) {
-			case string:
-				content = []byte(d)
-				c.Writer.Header().Set("Content-Type", "application/text; charset=utf-8")
-			case []byte:
-				content = d
-				c.Writer.Header().Set("Content-Type", "application/text; charset=utf-8")
-			default:
-				content, err = json.Marshal(c.Data)
-				if err != nil {
-					content, _ = json.Marshal(Error("json format error, " + err.Error()))
-				}
-				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-			}
-
-			c.Writer.WriteHeader(c.Code)
-			c.Writer.Write(content)
-		}
-	}
 }
