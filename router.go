@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"path"
-	"reflect"
 	"runtime"
-	"strings"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -33,7 +31,6 @@ type Router interface {
 	Delete(uri string, handler ...interface{}) Router
 	Head(uri string, handler ...interface{}) Router
 	Options(uri string, handler ...interface{}) Router
-	AddResource(uri string, resource interface{}) Router
 	Any(uri string, handler ...interface{}) Router
 	Method(method, uri string, handler ...interface{}) Router
 	NotFound(handler http.Handler) Router
@@ -167,28 +164,6 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 		handlers = append(handlers, tmp)
 	}
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandler(r, handlers))
-	return r
-}
-
-func (r *router) AddResource(uri string, resource interface{}) Router {
-	value := reflect.ValueOf(resource)
-	beforeMethod := value.MethodByName("BeforeRequest")
-	afterMethod := value.MethodByName("AfterRequest")
-	for _, name := range [...]string{"Get", "Post", "Put", "Patch", "Delete", "Head", "Options"} {
-		method := value.MethodByName(name)
-		if !method.IsValid() {
-			continue
-		}
-		handlers := make([]interface{}, 0, 3)
-		if beforeMethod.IsValid() {
-			handlers = append(handlers, beforeMethod.Interface())
-		}
-		handlers = append(handlers, method.Interface())
-		if afterMethod.IsValid() {
-			handlers = append(handlers, afterMethod.Interface())
-		}
-		r.Method(strings.ToUpper(name), uri, handlers...)
-	}
 	return r
 }
 
