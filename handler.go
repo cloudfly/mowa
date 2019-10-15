@@ -6,6 +6,8 @@ import (
 	"expvar"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"os"
 	"runtime"
 
 	"github.com/julienschmidt/httprouter"
@@ -16,11 +18,13 @@ var (
 	varHandler       http.Handler
 	textContentType  = []string{"application/text; charset=utf-8"}
 	jsonContentType  = []string{"application/json; charset=utf-8"}
+	debug            = false
 )
 
 func init() {
 	notFoundResponse, _ = json.Marshal(DataBody{Code: 404, Error: "page not found"})
 	varHandler = expvar.Handler()
+	debug = os.Getenv("DEBUG") == "1"
 }
 
 // Handler function types supported
@@ -52,10 +56,10 @@ func (handler Handler) handle(ctx *Context) bool {
 	switch f := handler.f.(type) {
 	case handleFuncRaw:
 		f(ctx.Writer, ctx.Request)
-	case handleFunc:
-		ctx.Data = f(ctx)
 	case handleFuncHook:
 		f(ctx)
+	case handleFunc:
+		ctx.Data = f(ctx)
 	case handleFuncBreak:
 		ctx.Data, continuous = f(ctx)
 	case handleFuncCode:
@@ -87,6 +91,17 @@ func (h notFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 	return func(rw http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+
+		if debug {
+			info, err := httputil.DumpRequest(req, true)
+			if err != nil {
+				log.Printf("[ERROR] failed to dump http request: %s", err.Error())
+			} else {
+				log.Printf("Incoming HTTP Request:")
+				log.Printf("%s", info)
+			}
+		}
+
 		c := &Context{
 			Context: r.ctx,
 			Request: req,
@@ -98,23 +113,25 @@ func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 
 		// defer to recover in case of some panic, assert in context use this
 		defer func() {
-			if r := recover(); r != nil {
-				errs := ""
-				switch rr := r.(type) {
-				case string:
-					errs = rr
-				case error:
-					errs = rr.Error()
-				}
-				b, _ := json.Marshal(Error(errs))
-				c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-				c.Writer.WriteHeader(500)
-				c.Writer.Write(b)
-
-				buf := make([]byte, 1024*64)
-				runtime.Stack(buf, false)
-				log.Printf("%s\n%s\n", errs, buf)
+			r := recover()
+			if r == nil {
+				return
 			}
+			errs := ""
+			switch rr := r.(type) {
+			case string:
+				errs = rr
+			case error:
+				errs = rr.Error()
+			}
+			b, _ := json.Marshal(Error(errs))
+			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+			c.Writer.WriteHeader(500)
+			c.Writer.Write(b)
+
+			buf := make([]byte, 1024*64)
+			runtime.Stack(buf, false)
+			log.Printf("%s\n%s\n", errs, buf)
 		}()
 
 		c.Request.ParseForm()
