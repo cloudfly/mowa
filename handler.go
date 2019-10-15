@@ -112,26 +112,17 @@ func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 		}
 
 		// defer to recover in case of some panic, assert in context use this
+		if r.recovery != nil {
+			defer func() {
+				err := recover()
+				if err == nil {
+					return
+				}
+				r.recovery(c, err)
+			}()
+		}
 		defer func() {
-			r := recover()
-			if r == nil {
-				return
-			}
-			errs := ""
-			switch rr := r.(type) {
-			case string:
-				errs = rr
-			case error:
-				errs = rr.Error()
-			}
-			b, _ := json.Marshal(Error(errs))
-			c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-			c.Writer.WriteHeader(500)
-			c.Writer.Write(b)
 
-			buf := make([]byte, 1024*64)
-			runtime.Stack(buf, false)
-			log.Printf("%s\n%s\n", errs, buf)
 		}()
 
 		c.Request.ParseForm()
@@ -167,4 +158,25 @@ func httpRouterHandler(r *router, handlers Handlers) httprouter.Handle {
 			c.Writer.Write(content)
 		}
 	}
+}
+
+// Recovery 代表内置的 recover 函数, 它返回 panic 简单信息, 并打印 goroutine stack 信息到错误输出
+func Recovery(ctx *Context, err interface{}) {
+	errs := ""
+	switch rr := err.(type) {
+	case string:
+		errs = rr
+	case error:
+		errs = rr.Error()
+	}
+	b, _ := json.Marshal(Error(errs))
+	ctx.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	ctx.Writer.WriteHeader(500)
+	ctx.Writer.Write(b)
+
+	buf := make([]byte, 1024*64)
+	runtime.Stack(buf, false)
+	log.Printf("----------------------------------------------------------------")
+	log.Printf("%s\n%s\n", errs, buf)
+	log.Printf("----------------------------------------------------------------")
 }

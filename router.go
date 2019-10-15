@@ -31,15 +31,17 @@ type Router interface {
 	Any(uri string, handler ...interface{}) Router
 	Method(method, uri string, handler ...interface{}) Router
 	NotFound(handler http.Handler) Router
+	Recovery(func(*Context, interface{}))
 }
 
 // router is default router type, a realization of Router interface
 type router struct {
-	ctx    context.Context
-	parent *router
-	basic  *httprouter.Router
-	prefix string
-	hooks  [2]Handlers // hooks[0] is pre run handler, hooks[1] is post run handler
+	ctx      context.Context
+	parent   *router
+	basic    *httprouter.Router
+	prefix   string
+	hooks    [2]Handlers // hooks[0] is pre run handler, hooks[1] is post run handler
+	recovery func(*Context, interface{})
 }
 
 // newRouter create a default router
@@ -165,4 +167,8 @@ func (r *router) Method(method, uri string, handler ...interface{}) Router {
 	}
 	r.basic.Handle(method, path.Join(r.prefix, uri), httpRouterHandler(r, handlers))
 	return r
+}
+
+func (r *router) Recovery(f func(*Context, interface{})) {
+	r.recovery = f
 }

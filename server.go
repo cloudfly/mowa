@@ -28,6 +28,7 @@ func New(ctx context.Context) *Mowa {
 		ctx:    ctx,
 	}
 	s.server.Handler = s
+	s.Recovery(Recovery) // 使用默认的 recovery
 	return s
 }
 
