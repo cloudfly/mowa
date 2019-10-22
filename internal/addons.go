@@ -49,7 +49,7 @@ func ClusterUpdateNode(ctx *fasthttp.RequestCtx) interface{} {
 
 // ClusterRemoveNode 删除集群节点
 func ClusterRemoveNode(ctx *fasthttp.RequestCtx) interface{} {
-	name := ctx.String("name", "")
+	name := mowa.StringValue(ctx, "name", "")
 	if name == "" {
 		return mowa.ErrorWithCode(400, "node name required")
 	}
@@ -61,7 +61,7 @@ func ClusterRemoveNode(ctx *fasthttp.RequestCtx) interface{} {
 
 // ConfigRead read a value from dconf
 func ConfigRead(ctx *fasthttp.RequestCtx) interface{} {
-	key := ctx.String("key", "")
+	key := mowa.StringValue(ctx, "key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
 	}
@@ -74,7 +74,7 @@ func ConfigRead(ctx *fasthttp.RequestCtx) interface{} {
 
 // ConfigWrite write a key-value into dconf
 func ConfigWrite(ctx *fasthttp.RequestCtx) interface{} {
-	key := ctx.String("key", "")
+	key := mowa.StringValue(ctx, "key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
 	}
@@ -86,7 +86,7 @@ func ConfigWrite(ctx *fasthttp.RequestCtx) interface{} {
 
 // ConfigDelete del a key-value from dconf
 func ConfigDelete(ctx *fasthttp.RequestCtx) interface{} {
-	key := ctx.String("key", "")
+	key := mowa.StringValue(ctx, "key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
 	}
@@ -98,12 +98,12 @@ func ConfigDelete(ctx *fasthttp.RequestCtx) interface{} {
 
 // ConfigKeys get keys list by prefix
 func ConfigKeys(ctx *fasthttp.RequestCtx) interface{} {
-	return mowa.Data(conf.Keys(ctx.String("prefix", "")))
+	return mowa.Data(conf.Keys(mowa.StringValue(ctx, "prefix", "")))
 }
 
 // ConfigData get key-values by prefix
 func ConfigData(ctx *fasthttp.RequestCtx) interface{} {
-	return mowa.Data(conf.Data(ctx.String("prefix", "")))
+	return mowa.Data(conf.Data(mowa.StringValue(ctx, "prefix", "")))
 }
 
 // WithCluster add http api for cluster management
