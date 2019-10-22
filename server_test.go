@@ -10,16 +10,6 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var (
-	testC *Context
-)
-
-func init() {
-	testC = &Context{
-		RequestCtx: newRequest("GET", "http://localhost:1234/hello/world?name=chen&age=25&name=yun"),
-	}
-}
-
 func newRequest(method, url string) *fasthttp.RequestCtx {
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(url)
@@ -32,7 +22,7 @@ func newRequest(method, url string) *fasthttp.RequestCtx {
 func TestServer(t *testing.T) {
 	api := New(WithReadTimeout(time.Second))
 	go api.Run(":10000")
-	api.Get("/test", func(c *Context) (int, interface{}) {
+	api.Get("/test", func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, "test"
 	})
 	defer api.Shutdown()
@@ -47,7 +37,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestServeHTTP(t *testing.T) {
-	handler := func(c *Context) (int, interface{}) {
+	handler := func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, c.QueryArgs().Peek("return")
 	}
 
@@ -78,19 +68,19 @@ func TestServeHTTP(t *testing.T) {
 func TestHook(t *testing.T) {
 	num := 0
 	router := newRouter()
-	router.BeforeRequest(func(ctx *Context) {
+	router.BeforeRequest(func(ctx *fasthttp.RequestCtx) {
 		println("before request")
 		num++
 	})
-	router.Get("/test", func(ctx *Context) {
+	router.Get("/test", func(ctx *fasthttp.RequestCtx) {
 		println("in request")
 		num++
 	})
-	router.BeforeRequest(func(ctx *Context) {
+	router.BeforeRequest(func(ctx *fasthttp.RequestCtx) {
 		println("before request(2)")
 		num++
 	})
-	router.AfterRequest(func(ctx *Context) {
+	router.AfterRequest(func(ctx *fasthttp.RequestCtx) {
 		println("after request")
 		num++
 	})
@@ -102,7 +92,7 @@ func TestHook(t *testing.T) {
 
 func BenchmarkServeHTTPString(b *testing.B) {
 	api := New()
-	api.Get("/string", func(c *Context) (int, interface{}) {
+	api.Get("/string", func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, "test"
 	})
 	req := newRequest("GET", "http://localhost/string")
@@ -113,7 +103,7 @@ func BenchmarkServeHTTPString(b *testing.B) {
 
 func BenchmarkServeHTTPBytes(b *testing.B) {
 	api := New()
-	api.Get("/bytes", func(c *Context) (int, interface{}) {
+	api.Get("/bytes", func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, "test"
 	})
 	req := newRequest("GET", "http://localhost/bytes")
@@ -124,7 +114,7 @@ func BenchmarkServeHTTPBytes(b *testing.B) {
 
 func BenchmarkServeHTTPJSON(b *testing.B) {
 	api := New()
-	api.Get("/json", func(c *Context) (int, interface{}) {
+	api.Get("/json", func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, []int{1, 2, 34, 2, 1}
 	})
 	req := newRequest("GET", "http://localhost/json")

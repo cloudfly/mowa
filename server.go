@@ -25,7 +25,6 @@ func New(options ...Option) *Mowa {
 			Handler: router.Handler,
 		},
 	}
-	s.Recovery(Recovery) // 使用默认的 recovery
 	for _, op := range options {
 		op(s)
 	}
@@ -86,5 +85,12 @@ func WithReadTimeout(timeout time.Duration) Option {
 func WithWriteTimeout(timeout time.Duration) Option {
 	return func(mowa *Mowa) {
 		mowa.server.WriteTimeout = timeout
+	}
+}
+
+// WithRecoveryFunc setting the recovery function, it will be called when handler panic
+func WithRecoveryFunc(f func(ctx *fasthttp.RequestCtx, err interface{})) Option {
+	return func(mowa *Mowa) {
+		mowa.router.basic.PanicHandler = f
 	}
 }

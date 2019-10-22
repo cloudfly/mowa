@@ -35,11 +35,10 @@ func init() {
 // Handler function types supported
 type (
 	handleFuncRaw   = func(ctx *fasthttp.RequestCtx)
-	handleFuncHook  = func(*Context)
-	handleFunc      = func(*Context) interface{}
-	handleFuncBreak = func(*Context) (interface{}, bool)
-	handleFuncCode  = func(*Context) (int, interface{})
-	handleFuncFull  = func(*Context) (int, interface{}, bool)
+	handleFunc      = func(*fasthttp.RequestCtx) interface{}
+	handleFuncBreak = func(*fasthttp.RequestCtx) (interface{}, bool)
+	handleFuncCode  = func(*fasthttp.RequestCtx) (int, interface{})
+	handleFuncFull  = func(*fasthttp.RequestCtx) (int, interface{}, bool)
 )
 
 // Handler is the server handler type, switch interface{}.(type) is too slow
@@ -50,41 +49,53 @@ type Handler struct {
 // NewHandler create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
 	switch f.(type) {
-	case handleFuncRaw, handleFuncHook, handleFuncCode, handleFunc, handleFuncBreak, handleFuncFull:
+	case handleFuncRaw, handleFuncCode, handleFunc, handleFuncBreak, handleFuncFull:
 		return Handler{f}, nil
 	}
 	return Handler{}, errors.New("unvalid function type for handler")
 }
 
-func (handler Handler) handle(ctx *Context) bool {
-	continuous := true
+func (handler Handler) handle(ctx *fasthttp.RequestCtx) (int, interface{}, bool) {
 	switch f := handler.f.(type) {
 	case handleFuncRaw:
-		f(ctx.RequestCtx)
-	case handleFuncHook:
 		f(ctx)
+		return 0, nil, true
 	case handleFunc:
-		ctx.Data = f(ctx)
+		data := f(ctx)
+		return 200, data, true
 	case handleFuncBreak:
-		ctx.Data, continuous = f(ctx)
+		data, continuous := f(ctx)
+		return 200, data, continuous
 	case handleFuncCode:
-		ctx.Code, ctx.Data = f(ctx)
+		code, data := f(ctx)
+		return code, data, true
 	case handleFuncFull:
-		ctx.Code, ctx.Data, continuous = f(ctx)
+		return f(ctx)
 	}
-	return continuous
+	return 200, nil, true
 }
 
 // Handlers  reprsents a list of handler, handler in it will be called in sort until one handler return false
 type Handlers []Handler
 
-func (handlers Handlers) handle(ctx *Context) (continuous bool) {
+func (handlers Handlers) handle(ctx *fasthttp.RequestCtx) (int, interface{}, bool) {
+	var (
+		code int
+		data interface{}
+	)
 	for _, handler := range handlers {
-		if continuous := handler.handle(ctx); !continuous {
-			return false
+		c, d, b := handler.handle(ctx)
+		if c > 0 {
+			code = c
+		}
+		if d != nil {
+			data = d
+		}
+		if !b {
+			return code, data, false
 		}
 	}
-	return true
+	return code, data, true
 }
 
 func notFoundHandler(ctx *fasthttp.RequestCtx) {
@@ -94,47 +105,67 @@ func notFoundHandler(ctx *fasthttp.RequestCtx) {
 
 func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-
-		c := &Context{
-			RequestCtx: ctx,
-			Code:       200,
-			Data:       nil,
-		}
+		var (
+			code int
+			data interface{}
+		)
 
 		// run handler
-		if continuous := r.processHooks(c, headHook); continuous {
-			if continuous = handlers.handle(c); continuous {
-				r.processHooks(c, tailHook)
+		c, d, b := r.processHooks(ctx, headHook)
+		if c > 0 {
+			code = c
+		}
+		if d != nil {
+			data = d
+		}
+		if b {
+			c, d, b = handlers.handle(ctx)
+			if c > 0 {
+				code = c
+			}
+			if d != nil {
+				data = d
+			}
+			if b {
+				c, d, _ = r.processHooks(ctx, tailHook)
+				if c > 0 {
+					code = c
+				}
+				if d != nil {
+					data = d
+				}
 			}
 		}
 
-		if c.Data != nil {
+		if data != nil {
 			var (
 				content []byte
 				err     error
 			)
-			switch d := c.Data.(type) {
+			switch d := data.(type) {
 			case string:
 				content = []byte(d)
-				c.Response.Header.Set("Content-Type", textContentType)
+				ctx.Response.Header.Set("Content-Type", textContentType)
 			case []byte:
 				content = d
-				c.Response.Header.Set("Content-Type", textContentType)
+				ctx.Response.Header.Set("Content-Type", textContentType)
 			default:
-				content, err = json.Marshal(c.Data)
+				content, err = json.Marshal(data)
 				if err != nil {
 					content, _ = json.Marshal(Error("json format error, " + err.Error()))
 				}
-				c.Response.Header.Set("Content-Type", jsonContentType)
+				ctx.Response.Header.Set("Content-Type", jsonContentType)
 			}
-			c.SetStatusCode(c.Code)
-			c.Write(content)
+			ctx.SetStatusCode(code)
+			ctx.Write(content)
+			return
 		}
+		ctx.SetStatusCode(204)
 	}
 }
 
-// Recovery 代表内置的 recover 函数, 它返回 panic 简单信息, 并打印 goroutine stack 信息到错误输出
-func Recovery(ctx *fasthttp.RequestCtx, err interface{}) {
+// panicHandler 代表内置的 recover 函数, 它返回 panic 简单信息, 并打印 goroutine stack 信息到错误输出
+func panicHandler(ctx *fasthttp.RequestCtx, err interface{}) {
 	errs := ""
 	switch rr := err.(type) {
 	case string:
@@ -236,4 +267,37 @@ func sleep(ctx *fasthttp.RequestCtx, timeout time.Duration) {
 	case <-timer.C:
 	case <-ctx.Done():
 	}
+}
+
+// StringValue get a string argument from request by `name`, if not found, return `str`
+func StringValue(ctx *fasthttp.RequestCtx, name, str string) string {
+	v := ctx.UserValue(name)
+	if v == nil {
+		return str
+	}
+	return fmt.Sprintf("%s", v)
+}
+
+// IntValue get a integer argument from request by `name`, if not found, return `i`
+func IntValue(ctx *fasthttp.RequestCtx, name string, i int) int {
+	v := ctx.UserValue(name)
+	if v == nil {
+		return i
+	}
+	if j, err := strconv.Atoi(fmt.Sprintf("%s", v)); err == nil {
+		return j
+	}
+	return i
+}
+
+// Int64Value get a integer argument from request by `name`, if not found, return `i`
+func Int64Value(ctx *fasthttp.RequestCtx, name string, i int64) int64 {
+	v := ctx.UserValue(name)
+	if v == nil {
+		return i
+	}
+	if j, err := strconv.ParseInt(fmt.Sprintf("%s", v), 10, 64); err == nil {
+		return j
+	}
+	return i
 }
