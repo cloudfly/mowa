@@ -1,34 +1,34 @@
 package mowa
 
 import (
-	"context"
 	"net"
-	"net/http"
 	"sync"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 // Mowa represent a http server
 type Mowa struct {
-	Router // the router of server
-	sync.Mutex
-	server   *http.Server
-	ctx      context.Context
+	*router
+	sync.RWMutex
+	server   *fasthttp.Server
 	listener net.Listener
 }
 
 // New create a new http server
-func New(ctx context.Context) *Mowa {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func New(options ...Option) *Mowa {
+	router := newRouter()
 	s := &Mowa{
-		Router: newRouter(ctx),
-		server: new(http.Server),
-		ctx:    ctx,
+		router: router,
+		server: &fasthttp.Server{
+			Handler: router.Handler,
+		},
 	}
-	s.server.Handler = s
 	s.Recovery(Recovery) // 使用默认的 recovery
+	for _, op := range options {
+		op(s)
+	}
 	return s
 }
 
@@ -61,17 +61,30 @@ func (api *Mowa) RunWithListener(listener net.Listener) error {
 }
 
 // Shutdown the server gracefully
-func (api *Mowa) Shutdown(timeout time.Duration) error {
-	api.Lock()
-	defer api.Unlock()
-	c, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return api.server.Shutdown(c)
+func (api *Mowa) Shutdown() error {
+	return api.server.Shutdown()
 }
 
 // Listener return the net.TCPListener http service serve on
 func (api *Mowa) Listener() net.Listener {
-	api.Lock()
-	defer api.Unlock()
+	api.RLock()
+	defer api.RUnlock()
 	return api.listener
+}
+
+// Option represents the server's configuration setting
+type Option func(s *Mowa)
+
+// WithReadTimeout set the timeout duration for reading body from request
+func WithReadTimeout(timeout time.Duration) Option {
+	return func(mowa *Mowa) {
+		mowa.server.ReadTimeout = timeout
+	}
+}
+
+// WithWriteTimeout set the timeout duration for writing body to response
+func WithWriteTimeout(timeout time.Duration) Option {
+	return func(mowa *Mowa) {
+		mowa.server.WriteTimeout = timeout
+	}
 }
