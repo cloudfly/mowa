@@ -3,7 +3,6 @@ package mowa
 import (
 	"encoding/json"
 	"errors"
-	"expvar"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,21 +19,17 @@ import (
 
 var (
 	notFoundResponse []byte
-	varHandler       http.Handler
 	textContentType  = "application/text; charset=utf-8"
 	jsonContentType  = "application/json; charset=utf-8"
-	debug            = false
 )
 
 func init() {
 	notFoundResponse, _ = json.Marshal(DataBody{Code: 404, Error: "page not found"})
-	varHandler = expvar.Handler()
-	debug = os.Getenv("DEBUG") == "1"
 }
 
 // Handler function types supported
 type (
-	handleFuncRaw   = func(ctx *fasthttp.RequestCtx)
+	handleFuncRaw   = func(*fasthttp.RequestCtx)
 	handleFunc      = func(*fasthttp.RequestCtx) interface{}
 	handleFuncBreak = func(*fasthttp.RequestCtx) (interface{}, bool)
 	handleFuncCode  = func(*fasthttp.RequestCtx) (int, interface{})
@@ -55,47 +50,33 @@ func NewHandler(f interface{}) (Handler, error) {
 	return Handler{}, errors.New("unvalid function type for handler")
 }
 
-func (handler Handler) handle(ctx *fasthttp.RequestCtx) (int, interface{}, bool) {
+func (handler Handler) handle(ctx *fasthttp.RequestCtx, code *int, data *struct{ data interface{} }, continuous *bool) {
+	*code, *continuous = 200, true
 	switch f := handler.f.(type) {
 	case handleFuncRaw:
 		f(ctx)
-		return 0, nil, true
 	case handleFunc:
-		data := f(ctx)
-		return 200, data, true
+		*code = 200
+		data.data = f(ctx)
 	case handleFuncBreak:
-		data, continuous := f(ctx)
-		return 200, data, continuous
+		data.data, *continuous = f(ctx)
 	case handleFuncCode:
-		code, data := f(ctx)
-		return code, data, true
+		*code, data.data = f(ctx)
 	case handleFuncFull:
-		return f(ctx)
+		*code, data.data, *continuous = f(ctx)
 	}
-	return 200, nil, true
 }
 
 // Handlers  reprsents a list of handler, handler in it will be called in sort until one handler return false
 type Handlers []Handler
 
-func (handlers Handlers) handle(ctx *fasthttp.RequestCtx) (int, interface{}, bool) {
-	var (
-		code int
-		data interface{}
-	)
+func (handlers Handlers) handle(ctx *fasthttp.RequestCtx, code *int, data *struct{ data interface{} }, continuous *bool) {
 	for _, handler := range handlers {
-		c, d, b := handler.handle(ctx)
-		if c > 0 {
-			code = c
-		}
-		if d != nil {
-			data = d
-		}
-		if !b {
-			return code, data, false
+		handler.handle(ctx, code, data, continuous)
+		if !*continuous {
+			return
 		}
 	}
-	return code, data, true
 }
 
 func notFoundHandler(ctx *fasthttp.RequestCtx) {
@@ -106,43 +87,26 @@ func notFoundHandler(ctx *fasthttp.RequestCtx) {
 func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var (
-			code int
-			data interface{}
+			code       int
+			data       struct{ data interface{} }
+			continuous = true
 		)
 
 		// run handler
-		c, d, b := r.processHooks(ctx, headHook)
-		if c > 0 {
-			code = c
-		}
-		if d != nil {
-			data = d
-		}
-		if b {
-			c, d, b = handlers.handle(ctx)
-			if c > 0 {
-				code = c
-			}
-			if d != nil {
-				data = d
-			}
-			if b {
-				c, d, _ = r.processHooks(ctx, tailHook)
-				if c > 0 {
-					code = c
-				}
-				if d != nil {
-					data = d
-				}
+		r.processHooks(ctx, headHook, &code, &data, &continuous)
+		if continuous {
+			handlers.handle(ctx, &code, &data, &continuous)
+			if continuous {
+				r.processHooks(ctx, tailHook, &code, &data, &continuous)
 			}
 		}
 
-		if data != nil {
+		if data.data != nil {
 			var (
 				content []byte
 				err     error
 			)
-			switch d := data.(type) {
+			switch d := data.data.(type) {
 			case string:
 				content = []byte(d)
 				ctx.Response.Header.Set("Content-Type", textContentType)

@@ -55,36 +55,19 @@ func (r *router) setHook(i int, hooks ...interface{}) *router {
 	return r
 }
 
-func (r *router) processHooks(ctx *fasthttp.RequestCtx, hookIndex int) (int, interface{}, bool) {
-	var (
-		code int
-		data interface{}
-	)
+func (r *router) processHooks(ctx *fasthttp.RequestCtx, hookIndex int, code *int, data *struct{ data interface{} }, continuous *bool) {
 	if r.parent != nil {
-		c, d, b := r.parent.processHooks(ctx, hookIndex)
-		if c > 0 {
-			code = c
-		}
-		if d != nil {
-			data = d
-		}
-		if !b {
-			return code, data, false
+		r.parent.processHooks(ctx, hookIndex, code, data, continuous)
+		if !*continuous {
+			return
 		}
 	}
 	if len(r.hooks[hookIndex]) > 0 {
-		c, d, b := r.hooks[hookIndex].handle(ctx)
-		if c > 0 {
-			code = c
-		}
-		if d != nil {
-			data = d
-		}
-		if !b {
-			return code, data, false
+		r.hooks[hookIndex].handle(ctx, code, data, continuous)
+		if !*continuous {
+			return
 		}
 	}
-	return code, data, true
 }
 
 // Before set the pre hook for router, Before will run before handlers
