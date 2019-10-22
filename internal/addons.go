@@ -8,6 +8,7 @@ import (
 	"github.com/cloudfly/golang/cluster"
 	"github.com/cloudfly/golang/dconf"
 	"github.com/cloudfly/mowa"
+	"github.com/valyala/fasthttp"
 )
 
 type ctxKey string
@@ -18,12 +19,12 @@ var (
 )
 
 // ClusterNodes 返回 cluster 节点列表
-func ClusterNodes(ctx *mowa.Context) interface{} {
+func ClusterNodes(ctx *fasthttp.RequestCtx) interface{} {
 	return mowa.Data(clt.Nodes())
 }
 
 // ClusterAddNode 向集群增加节点
-func ClusterAddNode(ctx *mowa.Context) interface{} {
+func ClusterAddNode(ctx *fasthttp.RequestCtx) interface{} {
 	var node cluster.Node
 	if err := json.Unmarshal(ctx.ReadBody(), &node); err != nil {
 		return mowa.ErrorWithCode(400, err)
@@ -35,7 +36,7 @@ func ClusterAddNode(ctx *mowa.Context) interface{} {
 }
 
 // ClusterUpdateNode 更新集群节点
-func ClusterUpdateNode(ctx *mowa.Context) interface{} {
+func ClusterUpdateNode(ctx *fasthttp.RequestCtx) interface{} {
 	var node cluster.Node
 	if err := json.Unmarshal(ctx.ReadBody(), &node); err != nil {
 		return mowa.ErrorWithCode(400, err)
@@ -47,7 +48,7 @@ func ClusterUpdateNode(ctx *mowa.Context) interface{} {
 }
 
 // ClusterRemoveNode 删除集群节点
-func ClusterRemoveNode(ctx *mowa.Context) interface{} {
+func ClusterRemoveNode(ctx *fasthttp.RequestCtx) interface{} {
 	name := ctx.String("name", "")
 	if name == "" {
 		return mowa.ErrorWithCode(400, "node name required")
@@ -59,7 +60,7 @@ func ClusterRemoveNode(ctx *mowa.Context) interface{} {
 }
 
 // ConfigRead read a value from dconf
-func ConfigRead(ctx *mowa.Context) interface{} {
+func ConfigRead(ctx *fasthttp.RequestCtx) interface{} {
 	key := ctx.String("key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
@@ -72,7 +73,7 @@ func ConfigRead(ctx *mowa.Context) interface{} {
 }
 
 // ConfigWrite write a key-value into dconf
-func ConfigWrite(ctx *mowa.Context) interface{} {
+func ConfigWrite(ctx *fasthttp.RequestCtx) interface{} {
 	key := ctx.String("key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
@@ -84,7 +85,7 @@ func ConfigWrite(ctx *mowa.Context) interface{} {
 }
 
 // ConfigDelete del a key-value from dconf
-func ConfigDelete(ctx *mowa.Context) interface{} {
+func ConfigDelete(ctx *fasthttp.RequestCtx) interface{} {
 	key := ctx.String("key", "")
 	if key == "" {
 		return mowa.ErrorWithCode(400, "key required")
@@ -96,12 +97,12 @@ func ConfigDelete(ctx *mowa.Context) interface{} {
 }
 
 // ConfigKeys get keys list by prefix
-func ConfigKeys(ctx *mowa.Context) interface{} {
+func ConfigKeys(ctx *fasthttp.RequestCtx) interface{} {
 	return mowa.Data(conf.Keys(ctx.String("prefix", "")))
 }
 
 // ConfigData get key-values by prefix
-func ConfigData(ctx *mowa.Context) interface{} {
+func ConfigData(ctx *fasthttp.RequestCtx) interface{} {
 	return mowa.Data(conf.Data(ctx.String("prefix", "")))
 }
 
