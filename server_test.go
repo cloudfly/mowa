@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -20,12 +21,13 @@ func newRequest(method, url string) *fasthttp.RequestCtx {
 
 func TestServer(t *testing.T) {
 	api := New(WithKeepalive(false))
-	go api.Run(":10000")
+	go api.Run(":22345")
 	api.Get("/test", func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 200, "test"
 	})
 	defer api.Shutdown()
-	resp, err := http.Get("http://localhost:10000/test")
+	time.Sleep(time.Millisecond * 200)
+	resp, err := http.Get("http://localhost:22345/test")
 	if err != nil {
 		t.Error(err)
 	}
