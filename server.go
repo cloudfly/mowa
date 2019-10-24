@@ -116,3 +116,11 @@ func WithMaxConnsPerIP(n int) Option {
 		mowa.server.MaxConnsPerIP = n
 	}
 }
+
+// WithKeepalive will disable keepalive tcp connection, server will close the tcp connection after sending response
+// it's enabled by default
+func WithKeepalive(enable bool) Option {
+	return func(mowa *Mowa) {
+		mowa.server.DisableKeepalive = !enable
+	}
+}
