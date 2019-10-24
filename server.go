@@ -88,9 +88,31 @@ func WithWriteTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithRecoveryFunc setting the recovery function, it will be called when handler panic
-func WithRecoveryFunc(f func(ctx *fasthttp.RequestCtx, err interface{})) Option {
+// WithPanicHandler setting the recovery function, it will be called when handler panic
+func WithPanicHandler(f func(ctx *fasthttp.RequestCtx, err interface{})) Option {
 	return func(mowa *Mowa) {
 		mowa.router.basic.PanicHandler = f
+	}
+}
+
+// WithConcurrency set the maximum number of concurrent connections the server may serve.
+func WithConcurrency(n int) Option {
+	return func(mowa *Mowa) {
+		mowa.server.Concurrency = n
+	}
+}
+
+// WithLogger set the logger
+func WithLogger(logger fasthttp.Logger) Option {
+	return func(mowa *Mowa) {
+		mowa.server.Logger = logger
+	}
+}
+
+// WithMaxConnsPerIP set maximum number of concurrent client connections allowed per IP.
+// by default no limit
+func WithMaxConnsPerIP(n int) Option {
+	return func(mowa *Mowa) {
+		mowa.server.MaxConnsPerIP = n
 	}
 }
