@@ -5,13 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
 	"runtime"
-	"runtime/pprof"
-	"runtime/trace"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -147,73 +142,6 @@ func panicHandler(ctx *fasthttp.RequestCtx, err interface{}) {
 	log.Printf("----------------------------------------------------------------")
 	log.Printf("%s\n%s\n", errs, buf)
 	log.Printf("----------------------------------------------------------------")
-}
-
-func pprofHandler(ctx *fasthttp.RequestCtx) {
-	name := fmt.Sprintf("%s", ctx.UserValue("name"))
-	switch name {
-	case "cmdline":
-		ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
-		ctx.Response.Header.Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(ctx, strings.Join(os.Args, "\x00"))
-	case "profile":
-		ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
-		sec, err := strconv.ParseInt(string(ctx.FormValue("seconds")), 10, 64)
-		if sec <= 0 || err != nil {
-			sec = 30
-		}
-
-		// Set Content Type assuming StartCPUProfile will work,
-		// because if it does it starts writing.
-		ctx.Response.Header.Set("Content-Type", "application/octet-stream")
-		ctx.Response.Header.Set("Content-Disposition", `attachment; filename="profile"`)
-		if err := pprof.StartCPUProfile(ctx); err != nil {
-			// StartCPUProfile failed, so no writes yet.
-			debugResponseError(ctx, http.StatusInternalServerError,
-				fmt.Sprintf("Could not enable CPU profiling: %s", err))
-			return
-		}
-		sleep(ctx, time.Second*time.Duration(sec))
-		pprof.StopCPUProfile()
-	case "trace":
-		ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
-		sec, err := strconv.ParseInt(string(ctx.FormValue("seconds")), 10, 64)
-		if sec <= 0 || err != nil {
-			sec = 1
-		}
-
-		// Set Content Type assuming trace.Start will work,
-		// because if it does it starts writing.
-		ctx.Response.Header.Set("Content-Type", "application/octet-stream")
-		ctx.Response.Header.Set("Content-Disposition", `attachment; filename="trace"`)
-		if err := trace.Start(ctx); err != nil {
-			// trace.Start failed, so no writes yet.
-			debugResponseError(ctx, http.StatusInternalServerError,
-				fmt.Sprintf("Could not enable tracing: %s", err))
-			return
-		}
-		sleep(ctx, time.Second*time.Duration(sec))
-		trace.Stop()
-	default:
-		ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
-		p := pprof.Lookup(name)
-		if p == nil {
-			debugResponseError(ctx, http.StatusNotFound, "Unknown profile")
-			return
-		}
-		gc, _ := strconv.Atoi(string(ctx.FormValue("gc")))
-		if name == "heap" && gc > 0 {
-			runtime.GC()
-		}
-		debug, _ := strconv.Atoi(string(ctx.FormValue("debug")))
-		if debug != 0 {
-			ctx.Response.Header.Set("Content-Type", "text/plain; charset=utf-8")
-		} else {
-			ctx.Response.Header.Set("Content-Type", "application/octet-stream")
-			ctx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
-		}
-		p.WriteTo(ctx, debug)
-	}
 }
 
 func debugResponseError(ctx *fasthttp.RequestCtx, status int, txt string) {

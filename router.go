@@ -5,6 +5,8 @@ import (
 
 	"github.com/buaazp/fasthttprouter"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/expvarhandler"
+	"github.com/valyala/fasthttp/pprofhandler"
 )
 
 const (
@@ -28,7 +30,8 @@ func newRouter() *router {
 		hooks:  [2]Handlers{nil, nil},
 	}
 
-	r.basic.GET("/debug/pprof/:name", pprofHandler)
+	r.basic.GET("/debug/pprof/:name", pprofhandler.PprofHandler)
+	r.basic.GET("/debug/vars", expvarhandler.ExpvarHandler)
 	r.basic.NotFound = notFoundHandler
 	r.basic.MethodNotAllowed = notFoundHandler
 	r.basic.PanicHandler = panicHandler
