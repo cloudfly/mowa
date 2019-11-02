@@ -124,3 +124,10 @@ func WithKeepalive(enable bool) Option {
 		mowa.server.DisableKeepalive = !enable
 	}
 }
+
+// WithNotFoundHandler set the not found handler
+func WithNotFoundHandler(f func(ctx *fasthttp.RequestCtx)) Option {
+	return func(mowa *Mowa) {
+		mowa.router.basic.NotFound = f
+	}
+}
