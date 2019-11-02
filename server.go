@@ -22,7 +22,8 @@ func New(options ...Option) *Mowa {
 	s := &Mowa{
 		router: router,
 		server: &fasthttp.Server{
-			Handler: router.Handler,
+			Handler:     router.Handler,
+			ReadTimeout: time.Second * 3,
 		},
 	}
 	for _, op := range options {
@@ -85,6 +86,13 @@ func WithReadTimeout(timeout time.Duration) Option {
 func WithWriteTimeout(timeout time.Duration) Option {
 	return func(mowa *Mowa) {
 		mowa.server.WriteTimeout = timeout
+	}
+}
+
+// WithIdleTimeout set the idle connection timeout for waiting new request
+func WithIdleTimeout(timeout time.Duration) Option {
+	return func(mowa *Mowa) {
+		mowa.server.IdleTimeout = timeout
 	}
 }
 
