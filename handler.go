@@ -109,7 +109,7 @@ func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 				content = d
 				ctx.Response.Header.Set("Content-Type", textContentType)
 			default:
-				content, err = json.Marshal(data)
+				content, err = json.Marshal(data.data)
 				if err != nil {
 					content, _ = json.Marshal(Error("json format error, " + err.Error()))
 				}
