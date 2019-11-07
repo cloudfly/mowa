@@ -14,7 +14,7 @@ import (
 
 var (
 	notFoundResponse []byte
-	textContentType  = "application/text; charset=utf-8"
+	textContentType  = "text/plain; charset=utf-8"
 	jsonContentType  = "application/json; charset=utf-8"
 )
 
