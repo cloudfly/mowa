@@ -82,7 +82,7 @@ func notFoundHandler(ctx *fasthttp.RequestCtx) {
 func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var (
-			code       int
+			code       = 204
 			data       struct{ data interface{} }
 			continuous = true
 		)
@@ -119,7 +119,7 @@ func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 			ctx.Write(content)
 			return
 		}
-		ctx.SetStatusCode(204)
+		ctx.SetStatusCode(code)
 	}
 }
 
