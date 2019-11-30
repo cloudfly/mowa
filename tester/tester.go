@@ -59,32 +59,33 @@ func (tester *Tester) MustTest(request *fasthttp.Request) *fasthttp.Response {
 	return resp
 }
 
-// Get send a gt request
+// Get send a GET request
 func (tester *Tester) Get(path string) (*fasthttp.Response, error) {
-	return tester.method("GET", path, nil, nil)
+	return tester.Method("GET", path, nil, nil)
 }
 
-// Post send a gt request
+// Post send a POST request
 func (tester *Tester) Post(path string, args *fasthttp.Args, body []byte) (*fasthttp.Response, error) {
-	return tester.method("POST", path, args, body)
+	return tester.Method("POST", path, args, body)
 }
 
-// Put send a gt request
+// Put send a PUT request
 func (tester *Tester) Put(path string, args *fasthttp.Args, body []byte) (*fasthttp.Response, error) {
-	return tester.method("PUT", path, args, body)
+	return tester.Method("PUT", path, args, body)
 }
 
-// Patch send a gt request
+// Patch send a PATCH request
 func (tester *Tester) Patch(path string, args *fasthttp.Args, body []byte) (*fasthttp.Response, error) {
-	return tester.method("PATCH", path, args, body)
+	return tester.Method("PATCH", path, args, body)
 }
 
-// Delete send a gt request
+// Delete send a DELETE request
 func (tester *Tester) Delete(path string) (*fasthttp.Response, error) {
-	return tester.method("DELETE", path, nil, nil)
+	return tester.Method("DELETE", path, nil, nil)
 }
 
-func (tester *Tester) method(method, path string, args *fasthttp.Args, body []byte) (*fasthttp.Response, error) {
+// Method send a request
+func (tester *Tester) Method(method, path string, args *fasthttp.Args, body []byte) (*fasthttp.Response, error) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	req.Header.SetMethod(method)
