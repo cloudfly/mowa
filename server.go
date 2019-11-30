@@ -72,6 +72,11 @@ func (api *Mowa) Listener() net.Listener {
 	return api.listener
 }
 
+// Handler return the fasthttp's RequestHandler
+func (api *Mowa) Handler() fasthttp.RequestHandler {
+	return api.server.Handler
+}
+
 // Option represents the server's configuration setting
 type Option func(s *Mowa)
 
