@@ -48,6 +48,8 @@ func NewHandler(f interface{}) (Handler, error) {
 func (handler Handler) handle(ctx *fasthttp.RequestCtx, code *int, data *struct{ data interface{} }, continuous *bool) {
 	*code, *continuous = 200, true
 	switch f := handler.f.(type) {
+	case fasthttp.RequestHandler:
+		f(ctx)
 	case handleFuncRaw:
 		f(ctx)
 	case handleFunc:
@@ -115,11 +117,17 @@ func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 				}
 				ctx.Response.Header.Set("Content-Type", jsonContentType)
 			}
-			ctx.SetStatusCode(code)
+
+			if ctx.Response.Header.StatusCode() == 0 {
+				ctx.SetStatusCode(code)
+			}
 			ctx.Write(content)
+
 			return
 		}
-		ctx.SetStatusCode(code)
+		if ctx.Response.Header.StatusCode() == 0 {
+			ctx.SetStatusCode(code)
+		}
 	}
 }
 
