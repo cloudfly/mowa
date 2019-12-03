@@ -98,7 +98,7 @@ func BenchmarkServeHTTPString(b *testing.B) {
 	})
 	req := newRequest("GET", "http://localhost/string")
 	for i := 0; i < b.N; i++ {
-		api.Handler(req)
+		api.Handler()(req)
 	}
 }
 
@@ -109,7 +109,7 @@ func BenchmarkServeHTTPBytes(b *testing.B) {
 	})
 	req := newRequest("GET", "http://localhost/bytes")
 	for i := 0; i < b.N; i++ {
-		api.Handler(req)
+		api.Handler()(req)
 	}
 }
 
@@ -120,6 +120,6 @@ func BenchmarkServeHTTPJSON(b *testing.B) {
 	})
 	req := newRequest("GET", "http://localhost/json")
 	for i := 0; i < b.N; i++ {
-		api.Handler(req)
+		api.Handler()(req)
 	}
 }

@@ -39,7 +39,7 @@ type Handler struct {
 // NewHandler create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
 	switch f.(type) {
-	case handleFuncRaw, handleFuncCode, handleFunc, handleFuncBreak, handleFuncFull:
+	case fasthttp.RequestHandler, handleFuncRaw, handleFuncCode, handleFunc, handleFuncBreak, handleFuncFull:
 		return Handler{f}, nil
 	}
 	return Handler{}, errors.New("unvalid function type for handler")
