@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
 
@@ -28,6 +29,9 @@ func New(options ...Option) *Mowa {
 	}
 	for _, op := range options {
 		op(s)
+	}
+	if s.server.Logger == nil {
+		s.server.Logger = logrus.New()
 	}
 	return s
 }
