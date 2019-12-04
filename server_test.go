@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
@@ -14,9 +15,9 @@ func newRequest(method, url string) *fasthttp.RequestCtx {
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(url)
 	req.Header.SetMethod(method)
-	return &fasthttp.RequestCtx{
-		Request: *req,
-	}
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(req, nil, logrus.New())
+	return ctx
 }
 
 func TestServer(t *testing.T) {
@@ -42,7 +43,8 @@ func TestServeHTTP(t *testing.T) {
 		return 200, c.QueryArgs().Peek("return")
 	}
 
-	router := newRouter()
+	mowa := New()
+	router := mowa.router
 	router.Group("/api/v1").Get("/chen", handler)
 	router.Get("/yun", handler)
 	router.Get("/fei/:age", handler)

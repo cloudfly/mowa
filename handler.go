@@ -83,7 +83,6 @@ func notFoundHandler(ctx *fasthttp.RequestCtx) {
 func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
-		logger := ctx.Logger()
 		var (
 			code       = 204
 			data       struct{ data interface{} }
@@ -127,7 +126,9 @@ func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
 			ctx.SetStatusCode(code)
 		}
 
-		logger.Printf("response %d, cost %s", ctx.Response.StatusCode(), time.Now().Sub(start).String())
+		if logger := ctx.Logger(); logger != nil {
+			logger.Printf("response %d, cost %s", ctx.Response.StatusCode(), time.Now().Sub(start).String())
+		}
 	}
 }
 
@@ -148,10 +149,11 @@ func panicHandler(ctx *fasthttp.RequestCtx, err interface{}) {
 	buf := make([]byte, 1024*64)
 	runtime.Stack(buf, false)
 
-	logger := ctx.Logger()
-	logger.Printf("----------------------------------------------------------------")
-	logger.Printf("%s\n%s\n", errs, buf)
-	logger.Printf("----------------------------------------------------------------")
+	if logger := ctx.Logger(); logger != nil {
+		logger.Printf("----------------------------------------------------------------")
+		logger.Printf("%s\n%s\n", errs, buf)
+		logger.Printf("----------------------------------------------------------------")
+	}
 }
 
 func debugResponseError(ctx *fasthttp.RequestCtx, status int, txt string) {
