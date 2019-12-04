@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"runtime"
 	"strconv"
 	"time"
@@ -144,17 +143,15 @@ func panicHandler(ctx *fasthttp.RequestCtx, err interface{}) {
 	b, _ := json.Marshal(Error(errs))
 	ctx.Response.Header.Set("Content-Type", "application/json; charset=utf-8")
 	ctx.Response.SetStatusCode(500)
+	ctx.Write(b)
+
 	buf := make([]byte, 1024*64)
 	runtime.Stack(buf, false)
 
-	if ctx.UserValue("debug") == nil {
-		ctx.Write(b)
-	} else {
-		ctx.Write(buf)
-	}
-	log.Printf("----------------------------------------------------------------")
-	log.Printf("%s\n%s\n", errs, buf)
-	log.Printf("----------------------------------------------------------------")
+	logger := ctx.Logger()
+	logger.Printf("----------------------------------------------------------------")
+	logger.Printf("%s\n%s\n", errs, buf)
+	logger.Printf("----------------------------------------------------------------")
 }
 
 func debugResponseError(ctx *fasthttp.RequestCtx, status int, txt string) {
