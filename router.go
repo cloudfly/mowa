@@ -16,9 +16,10 @@ const (
 
 // router is default router type, a realization of *router interface
 type router struct {
-	basic  *fasthttprouter.Router
-	parent *router
-	prefix string
+	middlewares []MiddleWare
+	basic       *fasthttprouter.Router
+	parent      *router
+	prefix      string
 }
 
 // newRouter create a default router
@@ -36,7 +37,7 @@ func newRouter() *router {
 	return r
 }
 
-func (r *router) Handler(ctx *fasthttp.RequestCtx) {
+func (r *router) Handle(ctx *fasthttp.RequestCtx) {
 	r.basic.Handler(ctx)
 }
 
@@ -84,6 +85,6 @@ func (r *router) Group(prefix string) *router {
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
 func (r *router) Method(method, uri string, handler interface{}) *router {
-	r.basic.Handle(method, path.Join(r.prefix, uri), NewHandler(handler))
+	r.basic.Handle(method, path.Join(r.prefix, uri), NewHandler(MiddleWareChain(handler, r.middlewares...)))
 	return r
 }

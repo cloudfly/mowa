@@ -48,21 +48,21 @@ func TestServeHTTP(t *testing.T) {
 	router.Get("/fei/:age", handler)
 
 	req := newRequest("GET", "http://localhost/chen")
-	router.Handler(req)
+	router.Handle(req)
 	assert.Equal(t, 404, req.Response.StatusCode())
 
 	req = newRequest("GET", "http://localhost/api/v1/chen?return=hello")
-	router.Handler(req)
+	router.Handle(req)
 	assert.Equal(t, 200, req.Response.StatusCode())
 	assert.Equal(t, `hello`, string(req.Response.Body()))
 
 	req = newRequest("GET", "http://localhost/yun?return=yun")
-	router.Handler(req)
+	router.Handle(req)
 	assert.Equal(t, 200, req.Response.StatusCode())
 	assert.Equal(t, `yun`, string(req.Response.Body()))
 
 	req = newRequest("GET", "http://localhost/fei/23?return=23")
-	router.Handler(req)
+	router.Handle(req)
 	assert.Equal(t, `23`, string(req.Response.Body()))
 }
 
@@ -82,7 +82,7 @@ func TestHook(t *testing.T) {
 	}))
 
 	req := newRequest("GET", "http://localhost/test")
-	router.Handler(req)
+	router.Handle(req)
 	assert.Equal(t, 2, num)
 }
 

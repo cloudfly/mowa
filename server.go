@@ -22,7 +22,7 @@ func New(options ...Option) *Mowa {
 	s := &Mowa{
 		router: router,
 		server: &fasthttp.Server{
-			Handler:     router.Handler,
+			Handler:     router.Handle,
 			ReadTimeout: time.Second * 3,
 		},
 	}
@@ -142,5 +142,12 @@ func WithKeepalive(enable bool) Option {
 func WithNotFoundHandler(f func(ctx *fasthttp.RequestCtx)) Option {
 	return func(mowa *Mowa) {
 		mowa.router.basic.NotFound = f
+	}
+}
+
+// WithMiddleWare set the global middlewares, they will be added to all handlers
+func WithMiddleWare(middlewares ...MiddleWare) Option {
+	return func(mowa *Mowa) {
+		mowa.router.middlewares = middlewares
 	}
 }
