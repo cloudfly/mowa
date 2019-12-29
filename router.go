@@ -77,9 +77,10 @@ func (r *router) Any(uri string, handler interface{}) *router {
 // Group create a router group with the uri prefix
 func (r *router) Group(prefix string) *router {
 	return &router{
-		parent: r,
-		basic:  r.basic,
-		prefix: path.Join(r.prefix, prefix),
+		middlewares: r.middlewares,
+		parent:      r,
+		basic:       r.basic,
+		prefix:      path.Join(r.prefix, prefix),
 	}
 }
 
