@@ -24,54 +24,44 @@ func init() {
 
 // Handler function types supported
 type (
-	handleFuncRaw   = func(*fasthttp.RequestCtx)
-	handleFunc      = func(*fasthttp.RequestCtx) interface{}
-	handleFuncBreak = func(*fasthttp.RequestCtx) (interface{}, bool)
-	handleFuncCode  = func(*fasthttp.RequestCtx) (int, interface{})
-	handleFuncFull  = func(*fasthttp.RequestCtx) (int, interface{}, bool)
+	handleFuncRaw  = func(*fasthttp.RequestCtx)
+	handleFunc     = func(*fasthttp.RequestCtx) interface{}
+	handleFuncCode = func(*fasthttp.RequestCtx) (int, interface{})
 )
 
-// Handler is the server handler type, switch interface{}.(type) is too slow
-type Handler struct {
-	f interface{}
-}
+// Handler is a alias of fasthttp.RequestHandler
+type Handler = fasthttp.RequestHandler
 
 // NewHandler create a new handler, the given argument must be a function
 func NewHandler(f interface{}) (Handler, error) {
-	switch f.(type) {
-	case fasthttp.RequestHandler, handleFuncRaw, handleFuncCode, handleFunc, handleFuncBreak, handleFuncFull:
-		return Handler{f}, nil
-	}
-	return Handler{}, errors.New("unvalid function type for handler")
-}
-
-func (handler Handler) handle(ctx *fasthttp.RequestCtx, code *int, data *struct{ data interface{} }, continuous *bool) {
-	*code, *continuous = 200, true
-	switch f := handler.f.(type) {
+	switch fn := f.(type) {
+	case fasthttp.RequestHandler:
+		return fn, nil
 	case handleFuncRaw:
-		f(ctx)
-	case handleFunc:
-		*code = 200
-		data.data = f(ctx)
-	case handleFuncBreak:
-		data.data, *continuous = f(ctx)
+		return Handler(fn), nil
 	case handleFuncCode:
-		*code, data.data = f(ctx)
-	case handleFuncFull:
-		*code, data.data, *continuous = f(ctx)
+		return func(ctx *fasthttp.RequestCtx) {
+			code, data := fn(ctx)
+			handleCodeData(ctx, code, data)
+		}, nil
+	case handleFunc:
+		return func(ctx *fasthttp.RequestCtx) {
+			data := fn(ctx)
+			handleCodeData(ctx, 0, data)
+		}, nil
 	}
+	return nil, errors.New("unvalid function type for handler")
 }
 
-// Handlers  reprsents a list of handler, handler in it will be called in sort until one handler return false
-type Handlers []Handler
+// MiddleWare accept a Handler and return a new handler, it may change the behavier of the old handler
+type MiddleWare func(Handler) Handler
 
-func (handlers Handlers) handle(ctx *fasthttp.RequestCtx, code *int, data *struct{ data interface{} }, continuous *bool) {
-	for _, handler := range handlers {
-		handler.handle(ctx, code, data, continuous)
-		if !*continuous {
-			return
-		}
+// MiddleWareChain add multiple middlewares to handler
+func MiddleWareChain(handler Handler, mws ...MiddleWare) Handler {
+	if len(mws) == 0 {
+		return handler
 	}
+	return MiddleWareChain(mws[0](handler), mws[1:]...)
 }
 
 func notFoundHandler(ctx *fasthttp.RequestCtx) {
@@ -79,47 +69,31 @@ func notFoundHandler(ctx *fasthttp.RequestCtx) {
 	ctx.Write(notFoundResponse)
 }
 
-func httpRouterHandler(r *router, handlers Handlers) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		var (
-			code       = 204
-			data       struct{ data interface{} }
-			continuous = true
-		)
-
-		// run handler
-		r.processHooks(ctx, headHook, &code, &data, &continuous)
-		if continuous {
-			handlers.handle(ctx, &code, &data, &continuous)
-			if continuous {
-				r.processHooks(ctx, tailHook, &code, &data, &continuous)
-			}
-		}
-
-		if data.data != nil {
-			var (
-				content []byte
-				err     error
-			)
-			switch d := data.data.(type) {
-			case string:
-				content = []byte(d)
-				ctx.Response.Header.Set("Content-Type", textContentType)
-			case []byte:
-				content = d
-				ctx.Response.Header.Set("Content-Type", textContentType)
-			default:
-				content, err = json.Marshal(data.data)
-				if err != nil {
-					content, _ = json.Marshal(Error("json format error, " + err.Error()))
-				}
-				ctx.Response.Header.Set("Content-Type", jsonContentType)
-			}
-			ctx.SetStatusCode(code)
-			ctx.Write(content)
-			return
-		}
+func handleCodeData(ctx *fasthttp.RequestCtx, code int, data interface{}) {
+	if code > 0 {
 		ctx.SetStatusCode(code)
+	}
+	if data != nil {
+		ctx.ResetBody()
+		var (
+			content []byte
+			err     error
+		)
+		switch d := data.(type) {
+		case string:
+			content = []byte(d)
+			ctx.Response.Header.Set("Content-Type", textContentType)
+		case []byte:
+			content = d
+			ctx.Response.Header.Set("Content-Type", textContentType)
+		default:
+			content, err = json.Marshal(data)
+			if err != nil {
+				content, _ = json.Marshal(Error("json format error, " + err.Error()))
+			}
+			ctx.Response.Header.Set("Content-Type", jsonContentType)
+		}
+		ctx.Write(content)
 	}
 }
 

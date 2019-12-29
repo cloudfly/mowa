@@ -69,26 +69,21 @@ func TestServeHTTP(t *testing.T) {
 func TestHook(t *testing.T) {
 	num := 0
 	router := newRouter()
-	router.BeforeRequest(func(ctx *fasthttp.RequestCtx) {
-		println("before request")
-		num++
-	})
-	router.Get("/test", func(ctx *fasthttp.RequestCtx) {
+
+	CounterMW := func(handler Handler) Handler {
+		return func(ctx *fasthttp.RequestCtx) {
+			num++
+			handler(ctx)
+		}
+	}
+	router.Get("/test", CounterMW(func(ctx *fasthttp.RequestCtx) {
 		println("in request")
 		num++
-	})
-	router.BeforeRequest(func(ctx *fasthttp.RequestCtx) {
-		println("before request(2)")
-		num++
-	})
-	router.AfterRequest(func(ctx *fasthttp.RequestCtx) {
-		println("after request")
-		num++
-	})
+	}))
 
 	req := newRequest("GET", "http://localhost/test")
 	router.Handler(req)
-	assert.Equal(t, 4, num)
+	assert.Equal(t, 2, num)
 }
 
 func BenchmarkServeHTTPString(b *testing.B) {
