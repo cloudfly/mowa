@@ -33,17 +33,19 @@ func OtherMW(handler interface{}) interface{} {
 }
 
 func main() {
-	api := mowa.New()
+	api := mowa.New(
+		mowa.WithMiddleWare(LogMW),
+	)
 
 	// always return http code 200
-	api.Get("/hello", LogMW(func(c *fasthttp.RequestCtx) interface{} {
+	api.Get("/hello", func(c *fasthttp.RequestCtx) interface{} {
 		return "hello world! /hello"
-	}))
+	})
 
 	v1 := api.Group("/api/v1")
-	v1.Get("/hello", mowa.MiddleWareChain(func(c *fasthttp.RequestCtx) (int, interface{}) {
+	v1.Get("/hello", OtherMW(func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 202, "hello world! /api/v1/hello"
-	}, LogMW, OtherMW))
+	}))
 
 	api.Run(":8080")
 }
