@@ -7,36 +7,45 @@ Mowa
 ## Demo
 
 ```golang
+package main
+
 import (
 	"fmt"
+	"time"
 
 	"github.com/cloudfly/mowa"
 	"github.com/valyala/fasthttp"
 )
 
-func LogMW(c *fasthttp.RequestCtx) {
-	start := time.Now()
-	fmt.Printf("%s %s cost %s\n", c.Method(), c.URI(), time.Now().Sub(start))
+func LogMW(handler interface{}) interface{} {
+	return func(ctx *fasthttp.RequestCtx) {
+		start := time.Now()
+		mowa.NewHandler(handler)(ctx)
+		fmt.Printf("%s %s cost %s\n", ctx.Method(), ctx.URI(), time.Now().Sub(start))
+	}
 }
 
-func OtherMW(c *fasthttp.RequestCtx) {
-	fmt.Printf("other middleware")
+func OtherMW(handler interface{}) interface{} {
+	return func(ctx *fasthttp.RequestCtx) {
+		mowa.NewHandler(handler)(ctx)
+		fmt.Printf("other middleware\n")
+	}
 }
-
 
 func main() {
 	api := mowa.New()
 
 	// always return http code 200
-	api.Get("/hello", LogWM(func(c *fasthttp.RequestCtx) interface{} {
+	api.Get("/hello", LogMW(func(c *fasthttp.RequestCtx) interface{} {
 		return "hello world! /hello"
 	}))
 
 	v1 := api.Group("/api/v1")
-	v1.Get("/hello", MiddleWareChain(func(c *fasthttp.RequestCtx) (int, interface{}) {
+	v1.Get("/hello", mowa.MiddleWareChain(func(c *fasthttp.RequestCtx) (int, interface{}) {
 		return 202, "hello world! /api/v1/hello"
 	}, LogMW, OtherMW))
 
 	api.Run(":8080")
 }
+
 ```

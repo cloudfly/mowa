@@ -32,8 +32,17 @@ type (
 // Handler is a alias of fasthttp.RequestHandler
 type Handler = fasthttp.RequestHandler
 
-// NewHandler create a new handler, the given argument must be a function
-func NewHandler(f interface{}) (Handler, error) {
+// NewHandler create a new handler, the given argument must be a valid function, otherwise it will panic
+func NewHandler(f interface{}) Handler {
+	h, err := NewHandler2(f)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+// NewHandler2 create a new handler, if return error if the given argument is not a valid function
+func NewHandler2(f interface{}) (Handler, error) {
 	switch fn := f.(type) {
 	case fasthttp.RequestHandler:
 		return fn, nil
@@ -54,12 +63,12 @@ func NewHandler(f interface{}) (Handler, error) {
 }
 
 // MiddleWare accept a Handler and return a new handler, it may change the behavier of the old handler
-type MiddleWare func(Handler) Handler
+type MiddleWare func(interface{}) interface{}
 
 // MiddleWareChain add multiple middlewares to handler
-func MiddleWareChain(handler Handler, mws ...MiddleWare) Handler {
+func MiddleWareChain(handler interface{}, mws ...MiddleWare) interface{} {
 	if len(mws) == 0 {
-		return handler
+		return NewHandler(handler)
 	}
 	return MiddleWareChain(mws[0](handler), mws[1:]...)
 }

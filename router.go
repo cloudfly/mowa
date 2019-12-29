@@ -84,10 +84,6 @@ func (r *router) Group(prefix string) *router {
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
 func (r *router) Method(method, uri string, handler interface{}) *router {
-	h, err := NewHandler(handler)
-	if err != nil {
-		panic(err)
-	}
-	r.basic.Handle(method, path.Join(r.prefix, uri), h)
+	r.basic.Handle(method, path.Join(r.prefix, uri), NewHandler(handler))
 	return r
 }
