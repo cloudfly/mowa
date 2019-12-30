@@ -1,4 +1,4 @@
-module github.com/cloudfly/mowa
+module github.com/cloudfly/mowa/v3
 
 go 1.12
 
