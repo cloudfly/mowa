@@ -70,16 +70,15 @@ func TestHook(t *testing.T) {
 	num := 0
 	router := newRouter()
 
-	CounterMW := func(handler Handler) Handler {
-		return func(ctx *fasthttp.RequestCtx) {
-			num++
-			handler(ctx)
-		}
+	CounterMW := func(ctx *fasthttp.RequestCtx, next Handler) {
+		num++
+		next(ctx)
 	}
-	router.Get("/test", CounterMW(func(ctx *fasthttp.RequestCtx) {
+	router.Use(CounterMW)
+	router.Get("/test", func(ctx *fasthttp.RequestCtx) {
 		println("in request")
 		num++
-	}))
+	})
 
 	req := newRequest("GET", "http://localhost/test")
 	router.Handle(req)
