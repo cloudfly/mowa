@@ -144,10 +144,3 @@ func WithNotFoundHandler(f func(ctx *fasthttp.RequestCtx)) Option {
 		mowa.router.basic.NotFound = f
 	}
 }
-
-// WithMiddleWare set the global middlewares, they will be added to all handlers
-func WithMiddleWare(middlewares ...MiddleWare) Option {
-	return func(mowa *Mowa) {
-		mowa.router.middlewares = middlewares
-	}
-}

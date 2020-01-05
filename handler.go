@@ -62,17 +62,6 @@ func NewHandler2(f interface{}) (Handler, error) {
 	return nil, errors.New("unvalid function type for handler")
 }
 
-// MiddleWare accept a Handler and return a new handler, it may change the behavier of the old handler
-type MiddleWare func(interface{}) interface{}
-
-// MiddleWareChain add multiple middlewares to handler
-func MiddleWareChain(handler interface{}, mws ...MiddleWare) interface{} {
-	if len(mws) == 0 {
-		return NewHandler(handler)
-	}
-	return MiddleWareChain(mws[0](handler), mws[1:]...)
-}
-
 func notFoundHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetStatusCode(404)
 	ctx.Write(notFoundResponse)
