@@ -75,13 +75,19 @@ func (r *router) Any(uri string, handler interface{}) *router {
 }
 
 // Group create a router group with the uri prefix
-func (r *router) Group(prefix string) *router {
+func (r *router) Group(prefix string, middlewares ...Middleware) *router {
 	return &router{
-		middlewares: r.middlewares,
+		middlewares: middlewares,
 		parent:      r,
 		basic:       r.basic,
 		prefix:      path.Join(r.prefix, prefix),
 	}
+}
+
+// Use a middleware to router
+func (r *router) Use(middlewares ...Middleware) *router {
+	r.middlewares = append(r.middlewares, middlewares...)
+	return r
 }
 
 // Method is a raw function route for handler, the method can be 'GET', 'POST'...
@@ -96,9 +102,4 @@ func (r *router) bindMiddleware(handler Handler) Handler {
 		return r.parent.bindMiddleware(handler)
 	}
 	return handler
-}
-
-// Use a middleware to router
-func (r *router) Use(middleware Middleware) {
-	r.middlewares = append(r.middlewares, middleware)
 }

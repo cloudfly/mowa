@@ -17,9 +17,9 @@ func Middlewares(handler Handler, mws ...Middleware) Handler {
 	}
 	return Middlewares(
 		func(ctx *fasthttp.RequestCtx) {
-			mws[len(mws)-1](ctx, handler)
+			mws[0](ctx, handler)
 		},
-		mws[:len(mws)-1]...,
+		mws[1:]...,
 	)
 }
 
